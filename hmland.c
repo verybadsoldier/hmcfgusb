@@ -216,7 +216,7 @@ int main(int argc, char **argv)
 		}
 	}
 
-	libusb_close(NULL);
+	hmcfgusb_close(dev);
 
 	return EXIT_SUCCESS;
 }

@@ -34,7 +34,7 @@
 #include "hexdump.h"
 #include "hmcfgusb.h"
 
-#define USB_TIMEOUT		10000
+#define USB_TIMEOUT	10000
 
 #define ID_VENDOR	0x1b1f
 #define ID_PRODUCT	0xc00f
@@ -45,6 +45,8 @@
 
 #define EP_OUT		0x02
 #define EP_IN		0x83
+
+#define INTERFACE	0
 
 static int quit = 0;
 
@@ -116,13 +118,13 @@ static libusb_device_handle *hmcfgusb_find() {
 				return NULL;
 			}
 
-			err = libusb_detach_kernel_driver(devh, 0);
+			err = libusb_detach_kernel_driver(devh, INTERFACE);
 			if ((err != 0) && (err != LIBUSB_ERROR_NOT_FOUND)) {
 				fprintf(stderr, "Can't detach kernel driver: %s\n", usb_strerror(err));
 				return NULL;
 			}
 
-			err = libusb_claim_interface(devh, 0);
+			err = libusb_claim_interface(devh, INTERFACE);
 			if ((err != 0)) {
 				fprintf(stderr, "Can't claim interface: %s\n", usb_strerror(err));
 				return NULL;
@@ -185,7 +187,7 @@ static struct libusb_transfer *hmcfgusb_prepare_int(libusb_device_handle *devh, 
 	libusb_fill_interrupt_transfer(transfer, devh, EP_IN,
 			data_buf, ASYNC_SIZE, cb, data, USB_TIMEOUT);
 
-	transfer->flags = LIBUSB_TRANSFER_SHORT_NOT_OK;
+	transfer->flags = LIBUSB_TRANSFER_SHORT_NOT_OK | LIBUSB_TRANSFER_FREE_BUFFER;
 
 	err = libusb_submit_transfer(transfer);
 	if (err != 0) {
@@ -199,6 +201,7 @@ static struct libusb_transfer *hmcfgusb_prepare_int(libusb_device_handle *devh, 
 }
 
 struct hmcfgusb_cb_data {
+	struct hmcfgusb_dev *dev;
 	hmcfgusb_cb_fn cb;
 	void *data;
 };
@@ -208,14 +211,20 @@ static void LIBUSB_CALL hmcfgusb_interrupt(struct libusb_transfer *transfer)
 	int err;
 	struct hmcfgusb_cb_data *cb_data;
 
+	cb_data = transfer->user_data;
+
 	if (transfer->status != LIBUSB_TRANSFER_COMPLETED) {
 		if (transfer->status != LIBUSB_TRANSFER_TIMED_OUT) {
 			fprintf(stderr, "Interrupt transfer not completed: %d!\n", transfer->status);
 			quit = EIO;
+
+			if (cb_data && cb_data->dev && cb_data->dev->transfer) {
+				libusb_free_transfer(cb_data->dev->transfer);
+				cb_data->dev->transfer = NULL;
+			}
 			return;
 		}
 	} else {
-		cb_data = transfer->user_data;
 		if (cb_data && cb_data->cb) {
 			cb_data->cb(transfer->buffer, transfer->actual_length, cb_data->data);
 		} else {
@@ -269,6 +278,7 @@ struct hmcfgusb_dev *hmcfgusb_init(hmcfgusb_cb_fn cb, void *data)
 
 	memset(cb_data, 0, sizeof(struct hmcfgusb_cb_data));
 
+	cb_data->dev = dev;
 	cb_data->cb = cb;
 	cb_data->data = data;
 
@@ -391,4 +401,23 @@ int hmcfgusb_poll(struct hmcfgusb_dev *dev, int timeout)
 		errno = quit;
 
 	return -1;
+}
+
+void hmcfgusb_close(struct hmcfgusb_dev *dev)
+{
+	int err;
+
+	if (dev->transfer) {
+		libusb_cancel_transfer(dev->transfer);
+	}
+
+	err = libusb_release_interface(dev->usb_devh, INTERFACE);
+	if ((err != 0)) {
+		fprintf(stderr, "Can't release interface: %s\n", usb_strerror(err));
+	}
+
+	libusb_close(dev->usb_devh);
+	free(dev);
+
+	libusb_exit(NULL);
 }
