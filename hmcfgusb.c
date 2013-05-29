@@ -152,16 +152,12 @@ int hmcfgusb_send(struct hmcfgusb_dev *usbdev, unsigned char* send_data, int len
 		return 0;
 	}
 
-	usleep(1000);
-
 	if (done) {
 		err = libusb_interrupt_transfer(usbdev->usb_devh, EP_OUT, send_data, 0, &cnt, USB_TIMEOUT);
 		if (err) {
 			fprintf(stderr, "Can't send data: %s\n", usb_strerror(err));
 			return 0;
 		}
-
-		usleep(1000);
 	}
 
 	return 1;
@@ -374,6 +370,7 @@ int hmcfgusb_poll(struct hmcfgusb_dev *dev, int timeout)
 		n = poll(dev->pfd, dev->n_pfd, tv.tv_sec * 1000);
 		if (n < 0) {
 			perror("poll");
+			errno = 0;
 			return -1;
 		} else if (n == 0) {
 			usb_event = 1;
@@ -384,6 +381,7 @@ int hmcfgusb_poll(struct hmcfgusb_dev *dev, int timeout)
 						usb_event = 1;
 						break;
 					} else {
+						errno = 0;
 						return dev->pfd[fd_n].fd;
 					}
 				}
@@ -401,8 +399,11 @@ int hmcfgusb_poll(struct hmcfgusb_dev *dev, int timeout)
 		}
 	}
 
-	if (quit)
+	errno = 0;
+	if (quit) {
+		fprintf(stderr, "closing device-connection due to error %d\n", quit);
 		errno = quit;
+	}
 
 	return -1;
 }
