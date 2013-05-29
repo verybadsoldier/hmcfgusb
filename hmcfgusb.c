@@ -49,6 +49,7 @@
 #define INTERFACE	0
 
 static int quit = 0;
+static int debug = 1;
 
 /* Not in all libusb-1.0 versions, so we have to roll our own :-( */
 static char * usb_strerror(int e)
@@ -142,13 +143,12 @@ int hmcfgusb_send(struct hmcfgusb_dev *usbdev, unsigned char* send_data, int len
 {
 	int err;
 	int cnt;
-	int ret;
 
+	if (debug)
+		hexdump(send_data, len, "< ");
 	err = libusb_interrupt_transfer(usbdev->usb_devh, EP_OUT, send_data, len, &cnt, USB_TIMEOUT);
 	if (err) {
 		fprintf(stderr, "Can't send data: %s\n", usb_strerror(err));
-		if (err == LIBUSB_ERROR_NO_DEVICE)
-			exit(EXIT_FAILURE);
 		return 0;
 	}
 
@@ -156,13 +156,11 @@ int hmcfgusb_send(struct hmcfgusb_dev *usbdev, unsigned char* send_data, int len
 		err = libusb_interrupt_transfer(usbdev->usb_devh, EP_OUT, send_data, 0, &cnt, USB_TIMEOUT);
 		if (err) {
 			fprintf(stderr, "Can't send data: %s\n", usb_strerror(err));
-			if (err == LIBUSB_ERROR_NO_DEVICE)
-				exit(EXIT_FAILURE);
 			return 0;
 		}
 	}
 
-	return ret;
+	return 1;
 }
 
 static struct libusb_transfer *hmcfgusb_prepare_int(libusb_device_handle *devh, libusb_transfer_cb_fn cb, void *data)
@@ -226,9 +224,11 @@ static void LIBUSB_CALL hmcfgusb_interrupt(struct libusb_transfer *transfer)
 		}
 	} else {
 		if (cb_data && cb_data->cb) {
+			if (debug)
+				hexdump(transfer->buffer, transfer->actual_length, "> ");
 			cb_data->cb(transfer->buffer, transfer->actual_length, cb_data->data);
 		} else {
-			hexdump(transfer->buffer, transfer->actual_length, "RECV> ");
+			hexdump(transfer->buffer, transfer->actual_length, "> ");
 		}
 	}
 
@@ -417,6 +417,7 @@ void hmcfgusb_close(struct hmcfgusb_dev *dev)
 	}
 
 	libusb_close(dev->usb_devh);
+	free(dev->pfd);
 	free(dev);
 
 	libusb_exit(NULL);

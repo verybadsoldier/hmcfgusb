@@ -29,47 +29,63 @@
 #include <strings.h>
 #include <poll.h>
 #include <errno.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include <libusb-1.0/libusb.h>
 
 #include "hexdump.h"
 #include "hmcfgusb.h"
 
-void hmlan_format_out(uint8_t *buf, int buf_len, void *data)
+static int impersonate_hmlanif = 0;
+
+static void hmlan_format_out(uint8_t *buf, int buf_len, void *data)
 {
+	char out[1024];
+	char *pos;
+	int fd = *((int*)data);
 	int len;
 	int i;
 
 	if (buf_len < 1)
 		return;
 
-	//FIXME: Buffer here and write to fd_out
-	printf("%c", buf[0]);
+	memset(out, 0, sizeof(out));
+	pos = out;
+
+	*pos++ = buf[0];
 	switch(buf[0]) {
 		case 'H':
-			buf[5]='L';
-			buf[6]='A';
-			buf[7]='N';
+			if (impersonate_hmlanif) {
+				buf[5] = 'L';
+				buf[6] = 'A';
+				buf[7] = 'N';
+			}
 			len = buf[1];
 			for (i = 2; i < len + 2; i++) {
-				printf("%c", buf[i]);
+				*pos++=buf[i];
 			}
-			printf(",%02X%02X,", buf[i],
-					buf[i+1]);
-			i+=2;
+			snprintf(pos, 7, ",%02X%02X,", buf[i], buf[i+1]);
+			pos += 6;
+
+			i += 2;
 			len = buf[i]+i+1;
 			i++;
 			for (; i < len; i++) {
-				printf("%c", buf[i]);
+				*pos++=buf[i];
 			}
-			printf(",");
+			*pos++=',';
 			len = i+12;
 			for (; i < len; i++) {
-				printf("%02X", buf[i]);
+				snprintf(pos, 3, "%02X", buf[i]);
+				pos += 2;
+
 				switch(len-i) {
 					case 10:
 					case 7:
 					case 3:
-						printf(",");
+						*pos++=',';
 						break;
 					default:
 						break;
@@ -80,15 +96,17 @@ void hmlan_format_out(uint8_t *buf, int buf_len, void *data)
 		case 'E':
 			len = 13 + buf[13];
 			for (i = 0; i < len; i++) {
-				if (i != 12)
-					printf("%02X", buf[1+i]);
+				if (i != 12) {
+					snprintf(pos, 3, "%02X", buf[i+1]);
+					pos += 2;
+				}
 				switch(i) {
 					case 2:
 					case 4:
 					case 8:
 					case 9:
 					case 11:
-						printf(",");
+						*pos++=',';
 						break;
 					default:
 						break;
@@ -98,15 +116,17 @@ void hmlan_format_out(uint8_t *buf, int buf_len, void *data)
 		case 'R':
 			len = 14 + buf[14];
 			for (i = 0; i < len; i++) {
-				if (i != 13)
-					printf("%02X", buf[1+i]);
+				if (i != 13) {
+					snprintf(pos, 3, "%02X", buf[i+1]);
+					pos += 2;
+				}
 				switch(i) {
 					case 3:
 					case 5:
 					case 9:
 					case 10:
 					case 12:
-						printf(",");
+						*pos++=',';
 						break;
 					default:
 						break;
@@ -119,15 +139,19 @@ void hmlan_format_out(uint8_t *buf, int buf_len, void *data)
 			//HM> 0x0020: 9f a6 00 03 00 00 00 00 00 00 00 00 00 00 00 00   ................
 			//HM> 0x0030: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00   ................ 
 		default:
-			for (i = 1; i < buf_len; i++)
-				printf("%02X", buf[i]);
+			for (i = 1; i < buf_len; i++) {
+				snprintf(pos, 3, "%02X", buf[i]);
+				pos += 2;
+			}
 			hexdump(buf, buf_len, "Unknown> ");
 			break;
 	}
-	printf("\n");
+	*pos++='\r';
+	*pos++='\n';
+	write(fd, out, pos-out);
 }
 
-void hmlan_parse_in(int fd, void *data)
+static int hmlan_parse_in(int fd, void *data)
 {
 	struct hmcfgusb_dev *dev = data;
 	unsigned char buf[1024];
@@ -181,23 +205,37 @@ void hmlan_parse_in(int fd, void *data)
 		hmcfgusb_send(dev, send_buf, 1+(i/2), 1);
 	} else if (r < 0) {
 		perror("read");
+		return r;
+	} else {
+		return 0;
 	}
+
+	return 1;
 }
 
-int main(int argc, char **argv)
+static int comm(int fd_in, int fd_out, int master_socket)
 {
 	struct hmcfgusb_dev *dev;
 	int quit = 0;
 
-	dev = hmcfgusb_init(hmlan_format_out, NULL);
+	dev = hmcfgusb_init(hmlan_format_out, &fd_out);
 	if (!dev) {
 		fprintf(stderr, "Can't initialize HM-CFG-USB!\n");
-		exit(EXIT_FAILURE);
+		return 0;
 	}
 
-	if (!hmcfgusb_add_pfd(dev, STDIN_FILENO, POLLIN)) {
-		fprintf(stderr, "Can't add stdin to pollfd!\n");
-		exit(EXIT_FAILURE);
+	if (!hmcfgusb_add_pfd(dev, fd_in, POLLIN)) {
+		fprintf(stderr, "Can't add client to pollfd!\n");
+		hmcfgusb_close(dev);
+		return 0;
+	}
+
+	if (master_socket >= 0) {
+		if (!hmcfgusb_add_pfd(dev, master_socket, POLLIN)) {
+			fprintf(stderr, "Can't add master_socket to pollfd!\n");
+			hmcfgusb_close(dev);
+			return 0;
+		}
 	}
 
 	hmcfgusb_send(dev, (unsigned char*)"K", 1, 1);
@@ -207,7 +245,19 @@ int main(int argc, char **argv)
 
 		fd = hmcfgusb_poll(dev, 3600);
 		if (fd >= 0) {
-			hmlan_parse_in(fd, dev);
+			if (fd == master_socket) {
+				int client;
+
+				client = accept(master_socket, NULL, 0);
+				if (client >= 0) {
+					shutdown(client, SHUT_RDWR);
+					close(client);
+				}
+			} else {
+				if (hmlan_parse_in(fd, dev) <= 0) {
+					quit = 1;
+				}
+			}
 		} else if (fd == -1) {
 			if (errno) {
 				perror("hmcfgusb_poll");
@@ -217,6 +267,81 @@ int main(int argc, char **argv)
 	}
 
 	hmcfgusb_close(dev);
+	return 1;
+}
+
+static int socket_server(int port)
+{
+	struct sockaddr_in sin;
+	int sock;
+	int n;
+
+	impersonate_hmlanif = 1;
+
+	sock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
+	if (sock == -1) {
+		perror("Can't open socket");
+		return EXIT_FAILURE;
+	}
+
+	n = 1;
+	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &n, sizeof(n)) == -1) {
+		perror("Can't set socket options");
+		return EXIT_FAILURE;
+	}
+
+	memset(&sin, 0, sizeof(sin));
+	sin.sin_family = AF_INET;
+	sin.sin_port = htons(port);
+	sin.sin_addr.s_addr = htonl(INADDR_ANY);
+
+	if (bind(sock, (struct sockaddr*)&sin, sizeof(sin)) == -1) {
+		perror("Can't bind socket");
+		return EXIT_FAILURE;
+	}
+
+	if (listen(sock, 1) == -1) {
+		perror("Can't listen on socket");
+		return EXIT_FAILURE;
+	}
+
+	while(1) {
+		struct sockaddr_in csin;
+		socklen_t csinlen;
+		int client;
+
+		memset(&csin, 0, sizeof(csin));
+		csinlen = sizeof(csin);
+		client = accept(sock, (struct sockaddr*)&csin, &csinlen);
+		if (client == -1) {
+			perror("Couldn't accept client");
+			continue;
+		}
+
+		printf("Client accepted!\n");
+
+		comm(client, client, sock);
+
+		shutdown(client, SHUT_RDWR);
+		close(client);
+
+		printf("Connection closed!\n");
+
+	}
 
 	return EXIT_SUCCESS;
+}
+
+static int interactive_server(void)
+{
+	if (!comm(STDIN_FILENO, STDOUT_FILENO, -1))
+		return EXIT_FAILURE;
+
+	return EXIT_SUCCESS;
+}
+
+int main(int argc, char **argv)
+{
+	//return interactive_server();
+	return socket_server(1234);
 }
