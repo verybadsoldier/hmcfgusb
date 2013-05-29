@@ -292,7 +292,7 @@ static int hmlan_parse_in(int fd, void *data)
 					break;
 			}
 
-			hmcfgusb_send(dev, out, outpos-out, 1);
+			hmcfgusb_send(dev, out, sizeof(out), 1);
 		}
 	} else if (r < 0) {
 		perror("read");
