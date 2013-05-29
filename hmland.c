@@ -251,7 +251,7 @@ static int hmlan_parse_in(int fd, void *data)
 		inpos = buf;
 
 		if (debug)
-			fprintf(stderr, "LAN > %s\n", buf);
+			fprintf(stderr, "\nLAN > %s", buf);
 
 		while (inpos < inend) {
 			uint8_t *instart = inpos;
