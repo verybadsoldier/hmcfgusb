@@ -36,3 +36,4 @@ struct hmcfgusb_dev *hmcfgusb_init(hmcfgusb_cb_fn cb, void *data);
 int hmcfgusb_add_pfd(struct hmcfgusb_dev *dev, int fd, short events);
 int hmcfgusb_poll(struct hmcfgusb_dev *dev, int timeout);
 void hmcfgusb_close(struct hmcfgusb_dev *dev);
+void hmcfgusb_set_debug(int d);

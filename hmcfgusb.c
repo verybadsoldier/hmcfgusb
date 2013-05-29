@@ -49,7 +49,7 @@
 #define INTERFACE	0
 
 static int quit = 0;
-static int debug = 1;
+static int debug = 0;
 
 /* Not in all libusb-1.0 versions, so we have to roll our own :-( */
 static char * usb_strerror(int e)
@@ -421,4 +421,9 @@ void hmcfgusb_close(struct hmcfgusb_dev *dev)
 	free(dev);
 
 	libusb_exit(NULL);
+}
+
+void hmcfgusb_set_debug(int d)
+{
+	debug = d;
 }

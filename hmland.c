@@ -40,21 +40,142 @@
 
 static int impersonate_hmlanif = 0;
 
+#define	FLAG_LENGTH_BYTE	(1<<0)
+#define	FLAG_FORMAT_HEX		(1<<1)
+#define	FLAG_COMMA_BEFORE	(1<<2)
+#define	FLAG_COMMA_AFTER	(1<<3)
+#define	FLAG_NL			(1<<4)
+#define	FLAG_IGNORE_COMMAS	(1<<5)
+
+#define CHECK_SPACE(x)		if ((*outpos + x) > outend) { fprintf(stderr, "Not enough space!\n"); return 0; }
+#define CHECK_AVAIL(x)		if ((*inpos + x) > inend) { fprintf(stderr, "Not enough input available!\n"); return 0; }
+
+static int format_part_out(uint8_t **inpos, int inlen, uint8_t **outpos, int outlen, int len, int flags)
+{
+	uint8_t *buf_out = *outpos;
+	uint8_t *outend = *outpos + outlen;
+	uint8_t *inend = *inpos + inlen;
+	int i;
+
+	if (flags & FLAG_COMMA_BEFORE) {
+		CHECK_SPACE(1);
+		**outpos=',';
+		*outpos += 1;
+	}
+
+	if (flags & FLAG_LENGTH_BYTE) {
+		CHECK_AVAIL(1);
+		len = **inpos;
+		*inpos += 1;
+	}
+
+	if (flags & FLAG_FORMAT_HEX) {
+		char hex[3];
+
+		memset(hex, 0, sizeof(hex));
+
+		CHECK_AVAIL(len);
+		CHECK_SPACE(len*2);
+		for (i = 0; i < len; i++) {
+			if (snprintf(hex, sizeof(hex), "%02X", **inpos) != 2) {
+				fprintf(stderr, "Can't format hex-string!\n");
+				return 0;
+			}
+			*inpos += 1;
+			memcpy(*outpos, hex, 2);
+			*outpos += 2;
+		}
+	} else {
+		CHECK_AVAIL(len);
+		CHECK_SPACE(len);
+		memcpy(*outpos, *inpos, len);
+		*outpos += len;
+		*inpos += len;
+	}
+
+	if (flags & FLAG_COMMA_AFTER) {
+		CHECK_SPACE(1);
+		**outpos=',';
+		*outpos += 1;
+	}
+
+	if (flags & FLAG_NL) {
+		CHECK_SPACE(2);
+		**outpos='\r';
+		*outpos += 1;
+		**outpos='\n';
+		*outpos += 1;
+	}
+
+	return *outpos - buf_out;
+}
+
+static int parse_part_in(uint8_t **inpos, int inlen, uint8_t **outpos, int outlen, int flags)
+{
+	uint8_t *buf_out = *outpos;
+	uint8_t *outend = *outpos + outlen;
+	uint8_t *inend = *inpos + inlen;
+	char hex[3];
+
+	memset(hex, 0, sizeof(hex));
+
+	if (flags & FLAG_LENGTH_BYTE) {
+		int len = 0;
+		uint8_t *ip;
+
+		ip = *inpos;
+		while(ip < inend) {
+			if (*ip == ',') {
+				ip++;
+				if (!(flags & FLAG_IGNORE_COMMAS))
+					break;
+
+				continue;
+			}
+			len++;
+			ip++;
+		}
+		CHECK_SPACE(1);
+		**outpos = (len / 2);
+		*outpos += 1;
+	}
+
+	while(*inpos < inend) {
+		if (**inpos == ',') {
+			*inpos += 1;
+			if (!(flags & FLAG_IGNORE_COMMAS))
+				break;
+
+			continue;
+		}
+
+		CHECK_SPACE(1);
+		CHECK_AVAIL(2);
+		memcpy(hex, *inpos, 2);
+		*inpos += 2;
+
+		**outpos = strtoul(hex, NULL, 16);
+		*outpos += 1;
+	}
+
+	return *outpos - buf_out;
+}
+
 static void hmlan_format_out(uint8_t *buf, int buf_len, void *data)
 {
-	char out[1024];
-	char *pos;
+	uint8_t out[1024];
+	uint8_t *outpos;
+	uint8_t *inpos;
 	int fd = *((int*)data);
-	int len;
-	int i;
 
 	if (buf_len < 1)
 		return;
 
 	memset(out, 0, sizeof(out));
-	pos = out;
+	outpos = out;
+	inpos = buf;
 
-	*pos++ = buf[0];
+	format_part_out(&inpos, (buf_len-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), 1, 0);
 	switch(buf[0]) {
 		case 'H':
 			if (impersonate_hmlanif) {
@@ -62,109 +183,61 @@ static void hmlan_format_out(uint8_t *buf, int buf_len, void *data)
 				buf[6] = 'A';
 				buf[7] = 'N';
 			}
-			len = buf[1];
-			for (i = 2; i < len + 2; i++) {
-				*pos++=buf[i];
-			}
-			snprintf(pos, 7, ",%02X%02X,", buf[i], buf[i+1]);
-			pos += 6;
-
-			i += 2;
-			len = buf[i]+i+1;
-			i++;
-			for (; i < len; i++) {
-				*pos++=buf[i];
-			}
-			*pos++=',';
-			len = i+12;
-			for (; i < len; i++) {
-				snprintf(pos, 3, "%02X", buf[i]);
-				pos += 2;
-
-				switch(len-i) {
-					case 10:
-					case 7:
-					case 3:
-						*pos++=',';
-						break;
-					default:
-						break;
-				}
-			}
+			format_part_out(&inpos, (buf_len-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), 0, FLAG_LENGTH_BYTE);
+			format_part_out(&inpos, (buf_len-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), 2, FLAG_FORMAT_HEX | FLAG_COMMA_BEFORE);
+			format_part_out(&inpos, (buf_len-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), 0, FLAG_COMMA_BEFORE | FLAG_LENGTH_BYTE);
+			format_part_out(&inpos, (buf_len-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), 3, FLAG_FORMAT_HEX | FLAG_COMMA_BEFORE);
+			format_part_out(&inpos, (buf_len-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), 3, FLAG_FORMAT_HEX | FLAG_COMMA_BEFORE);
+			format_part_out(&inpos, (buf_len-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), 4, FLAG_FORMAT_HEX | FLAG_COMMA_BEFORE);
+			format_part_out(&inpos, (buf_len-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), 2, FLAG_FORMAT_HEX | FLAG_COMMA_BEFORE | FLAG_NL);
 
 			break;
 		case 'E':
-			len = 13 + buf[13];
-			for (i = 0; i < len; i++) {
-				if (i != 12) {
-					snprintf(pos, 3, "%02X", buf[i+1]);
-					pos += 2;
-				}
-				switch(i) {
-					case 2:
-					case 4:
-					case 8:
-					case 9:
-					case 11:
-						*pos++=',';
-						break;
-					default:
-						break;
-				}
-			}
+			format_part_out(&inpos, (buf_len-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), 3, FLAG_FORMAT_HEX);
+			format_part_out(&inpos, (buf_len-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), 2, FLAG_FORMAT_HEX | FLAG_COMMA_BEFORE);
+			format_part_out(&inpos, (buf_len-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), 4, FLAG_FORMAT_HEX | FLAG_COMMA_BEFORE);
+			format_part_out(&inpos, (buf_len-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), 1, FLAG_FORMAT_HEX | FLAG_COMMA_BEFORE);
+			format_part_out(&inpos, (buf_len-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), 2, FLAG_FORMAT_HEX | FLAG_COMMA_BEFORE);
+			format_part_out(&inpos, (buf_len-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), 0, FLAG_FORMAT_HEX | FLAG_COMMA_BEFORE | FLAG_LENGTH_BYTE | FLAG_NL);
+
 			break;
 		case 'R':
-			len = 14 + buf[14];
-			for (i = 0; i < len; i++) {
-				if (i != 13) {
-					snprintf(pos, 3, "%02X", buf[i+1]);
-					pos += 2;
-				}
-				switch(i) {
-					case 3:
-					case 5:
-					case 9:
-					case 10:
-					case 12:
-						*pos++=',';
-						break;
-					default:
-						break;
-				}
-			}
+			format_part_out(&inpos, (buf_len-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), 4, FLAG_FORMAT_HEX);
+			format_part_out(&inpos, (buf_len-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), 2, FLAG_FORMAT_HEX | FLAG_COMMA_BEFORE);
+			format_part_out(&inpos, (buf_len-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), 4, FLAG_FORMAT_HEX | FLAG_COMMA_BEFORE);
+			format_part_out(&inpos, (buf_len-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), 1, FLAG_FORMAT_HEX | FLAG_COMMA_BEFORE);
+			format_part_out(&inpos, (buf_len-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), 2, FLAG_FORMAT_HEX | FLAG_COMMA_BEFORE);
+			format_part_out(&inpos, (buf_len-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), 0, FLAG_FORMAT_HEX | FLAG_COMMA_BEFORE | FLAG_LENGTH_BYTE | FLAG_NL);
+
 			break;
 		case 'I':
-			//HM> 0x0000: 49 00 00 00 00 55 53 42 2d 49 46 03 bc 0a 4a 45   I....USB-IF...JE
-			//HM> 0x0010: 51 30 35 33 35 31 32 32 1d b1 55 68 ea 13 00 14   Q0535122..Uh....
-			//HM> 0x0020: 9f a6 00 03 00 00 00 00 00 00 00 00 00 00 00 00   ................
-			//HM> 0x0030: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00   ................ 
+			format_part_out(&inpos, (buf_len-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), 1, FLAG_FORMAT_HEX);
+			format_part_out(&inpos, (buf_len-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), 1, FLAG_FORMAT_HEX | FLAG_COMMA_BEFORE);
+			format_part_out(&inpos, (buf_len-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), 1, FLAG_FORMAT_HEX | FLAG_COMMA_BEFORE);
+			format_part_out(&inpos, (buf_len-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), 1, FLAG_FORMAT_HEX | FLAG_COMMA_BEFORE | FLAG_NL);
+
+			break;
 		default:
-			for (i = 1; i < buf_len; i++) {
-				snprintf(pos, 3, "%02X", buf[i]);
-				pos += 2;
-			}
+			format_part_out(&inpos, (buf_len-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), buf_len-1, FLAG_FORMAT_HEX | FLAG_NL);
 			hexdump(buf, buf_len, "Unknown> ");
 			break;
 	}
-	*pos++='\r';
-	*pos++='\n';
-	write(fd, out, pos-out);
+	write(fd, out, outpos-out);
 }
 
 static int hmlan_parse_in(int fd, void *data)
 {
 	struct hmcfgusb_dev *dev = data;
-	unsigned char buf[1024];
-	unsigned char send_buf[0x40]; //FIXME!!!
-	char tmp[3];
+	uint8_t buf[1024];
+	uint8_t out[0x40]; //FIXME!!!
+	uint8_t *outpos;
+	uint8_t *inpos;
 	int i;
 	int r;
 
 	r = read(fd, buf, sizeof(buf));
 	if (r > 0) {
-		int cnt;
-
-		memset(send_buf, 0, sizeof(send_buf));
+		memset(out, 0, sizeof(out));
 		for (i = 0; i < r; i++) {
 			if ((buf[i] == 0x0a) ||
 					(buf[i] == 0x0d)) {
@@ -173,36 +246,28 @@ static int hmlan_parse_in(int fd, void *data)
 			}
 		}
 
-		send_buf[0] = buf[0];
+		if (r == 0)
+			return 1;
 
-		cnt = 0;
-		for (i = 1; i < r; i++) {
-			if (buf[i] == ',') {
-				switch (buf[0]) {
-					case 'S':
-						if (cnt == 4) {
-							/* Add msg length */
-							memmove(buf+i+2, buf+i+1, r-(i+1));
-							snprintf(tmp, 3, "%02X", (int)((r-(i+1))/2));
-							memcpy(buf+i, tmp, 2);
-							r++;
-							break;
-						}
-					default:
-						memmove(buf+i, buf+i+1, r-(i+1));
-						r--;
-						break;
-				}
-				cnt++;
-			}
+		out[0] = buf[0];
+		outpos = out+1;
+		inpos = buf+1;
+
+		switch(buf[0]) {
+			case 'S':
+				parse_part_in(&inpos, (r-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), 0);
+				parse_part_in(&inpos, (r-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), 0);
+				parse_part_in(&inpos, (r-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), 0);
+				parse_part_in(&inpos, (r-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), 0);
+				parse_part_in(&inpos, (r-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), 0);
+				parse_part_in(&inpos, (r-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), FLAG_LENGTH_BYTE);
+				break;
+			default:
+				parse_part_in(&inpos, (r-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), FLAG_IGNORE_COMMAS);
+				break;
 		}
 
-		memset(tmp, 0, sizeof(tmp));
-		for (i = 1; i < r; i+=2) {
-			memcpy(tmp, buf + i, 2);
-			send_buf[1+(i/2)] = strtoul(tmp, NULL, 16);
-		}
-		hmcfgusb_send(dev, send_buf, 1+(i/2), 1);
+		hmcfgusb_send(dev, out, outpos-out, 1);
 	} else if (r < 0) {
 		perror("read");
 		return r;
