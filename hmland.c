@@ -38,7 +38,11 @@
 #include "hexdump.h"
 #include "hmcfgusb.h"
 
+extern char *optarg;
+
 static int impersonate_hmlanif = 0;
+static int debug = 0;
+static int verbose = 0;
 
 #define	FLAG_LENGTH_BYTE	(1<<0)
 #define	FLAG_FORMAT_HEX		(1<<1)
@@ -223,51 +227,73 @@ static void hmlan_format_out(uint8_t *buf, int buf_len, void *data)
 			break;
 	}
 	write(fd, out, outpos-out);
+	if (debug)
+		fprintf(stderr, "LAN < %s\n", out);
 }
 
 static int hmlan_parse_in(int fd, void *data)
 {
 	struct hmcfgusb_dev *dev = data;
-	uint8_t buf[1024];
+	uint8_t buf[1025];
 	uint8_t out[0x40]; //FIXME!!!
 	uint8_t *outpos;
 	uint8_t *inpos;
 	int i;
+	int last;
 	int r;
 
-	r = read(fd, buf, sizeof(buf));
+	memset(buf, 0, sizeof(buf));
+
+	r = read(fd, buf, sizeof(buf)-1);
 	if (r > 0) {
-		memset(out, 0, sizeof(out));
-		for (i = 0; i < r; i++) {
-			if ((buf[i] == 0x0a) ||
-					(buf[i] == 0x0d)) {
-				r = i;
-				break;
+		uint8_t *inend = buf + r;
+
+		inpos = buf;
+
+		if (debug)
+			fprintf(stderr, "LAN > %s\n", buf);
+
+		while (inpos < inend) {
+			uint8_t *instart = inpos;
+
+			if ((*inpos == '\r') || (*inpos == '\n')) {
+				inpos++;
+				continue;
 			}
+			
+			outpos = out;
+
+			last = inend - inpos;
+
+			for (i = 0; i < last; i++) {
+				if ((inpos[i] == '\r') || (inpos[i] == '\n')) {
+					last = i;
+					break;
+				}
+			}
+
+			if (last == 0)
+				continue;
+
+			memset(out, 0, sizeof(out));
+			*outpos++ = *inpos++;
+
+			switch(buf[0]) {
+				case 'S':
+					parse_part_in(&inpos, (last-(inpos-instart)), &outpos, (sizeof(out)-(outpos-out)), 0);
+					parse_part_in(&inpos, (last-(inpos-instart)), &outpos, (sizeof(out)-(outpos-out)), 0);
+					parse_part_in(&inpos, (last-(inpos-instart)), &outpos, (sizeof(out)-(outpos-out)), 0);
+					parse_part_in(&inpos, (last-(inpos-instart)), &outpos, (sizeof(out)-(outpos-out)), 0);
+					parse_part_in(&inpos, (last-(inpos-instart)), &outpos, (sizeof(out)-(outpos-out)), 0);
+					parse_part_in(&inpos, (last-(inpos-instart)), &outpos, (sizeof(out)-(outpos-out)), FLAG_LENGTH_BYTE);
+					break;
+				default:
+					parse_part_in(&inpos, (last-(inpos-instart)), &outpos, (sizeof(out)-(outpos-out)), FLAG_IGNORE_COMMAS);
+					break;
+			}
+
+			hmcfgusb_send(dev, out, outpos-out, 1);
 		}
-
-		if (r == 0)
-			return 1;
-
-		out[0] = buf[0];
-		outpos = out+1;
-		inpos = buf+1;
-
-		switch(buf[0]) {
-			case 'S':
-				parse_part_in(&inpos, (r-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), 0);
-				parse_part_in(&inpos, (r-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), 0);
-				parse_part_in(&inpos, (r-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), 0);
-				parse_part_in(&inpos, (r-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), 0);
-				parse_part_in(&inpos, (r-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), 0);
-				parse_part_in(&inpos, (r-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), FLAG_LENGTH_BYTE);
-				break;
-			default:
-				parse_part_in(&inpos, (r-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), FLAG_IGNORE_COMMAS);
-				break;
-		}
-
-		hmcfgusb_send(dev, out, outpos-out, 1);
 	} else if (r < 0) {
 		perror("read");
 		return r;
@@ -282,6 +308,8 @@ static int comm(int fd_in, int fd_out, int master_socket)
 {
 	struct hmcfgusb_dev *dev;
 	int quit = 0;
+
+	hmcfgusb_set_debug(debug);
 
 	dev = hmcfgusb_init(hmlan_format_out, &fd_out);
 	if (!dev) {
@@ -335,11 +363,23 @@ static int comm(int fd_in, int fd_out, int master_socket)
 	return 1;
 }
 
-static int socket_server(int port)
+static int socket_server(int port, int daemon)
 {
 	struct sockaddr_in sin;
 	int sock;
 	int n;
+	pid_t pid;
+
+	if (daemon) {
+		pid = fork();
+		if (pid > 0) {
+			printf("Daemon with PID %u started!\n", pid);
+			exit(EXIT_SUCCESS);
+		} else if (pid < 0) {
+			perror("fork");
+			exit(EXIT_FAILURE);
+		}
+	}
 
 	impersonate_hmlanif = 1;
 
@@ -374,6 +414,7 @@ static int socket_server(int port)
 		struct sockaddr_in csin;
 		socklen_t csinlen;
 		int client;
+		in_addr_t client_addr;
 
 		memset(&csin, 0, sizeof(csin));
 		csinlen = sizeof(csin);
@@ -383,14 +424,29 @@ static int socket_server(int port)
 			continue;
 		}
 
-		printf("Client accepted!\n");
+		/* FIXME: getnameinfo... */
+		client_addr = ntohl(csin.sin_addr.s_addr);
+
+		if (verbose) {
+			printf("Client %d.%d.%d.%d connected!\n",
+					(client_addr & 0xff000000) >> 24,
+					(client_addr & 0x00ff0000) >> 16,
+					(client_addr & 0x0000ff00) >> 8,
+					(client_addr & 0x000000ff));
+		}
 
 		comm(client, client, sock);
 
 		shutdown(client, SHUT_RDWR);
 		close(client);
 
-		printf("Connection closed!\n");
+		if (verbose) {
+			printf("Connection to %d.%d.%d.%d closed!\n",
+					(client_addr & 0xff000000) >> 24,
+					(client_addr & 0x00ff0000) >> 16,
+					(client_addr & 0x0000ff00) >> 8,
+					(client_addr & 0x000000ff));
+		}
 
 	}
 
@@ -405,8 +461,62 @@ static int interactive_server(void)
 	return EXIT_SUCCESS;
 }
 
+void hmlan_syntax(char *prog)
+{
+	fprintf(stderr, "Syntax: %s options\n\n", prog);
+	fprintf(stderr, "Possible options:\n");
+	fprintf(stderr, "\t-D\tdebug mode\n");
+	fprintf(stderr, "\t-d\tdaemon mode\n");
+	fprintf(stderr, "\t-h\tthis help\n");
+	fprintf(stderr, "\t-i\tinteractive mode (connect HM-CFG-USB to terminal)\n");
+	fprintf(stderr, "\t-p n\tlisten on port n (default 1000)\n");
+	fprintf(stderr, "\t-v\tverbose mode\n");
+
+}
+
 int main(int argc, char **argv)
 {
-	//return interactive_server();
-	return socket_server(1234);
+	int port = 1000;
+	int interactive = 0;
+	int daemon = 0;
+	char *ep;
+	int opt;
+
+	while((opt = getopt(argc, argv, "Ddhip:v")) != -1) {
+		switch (opt) {
+			case 'D':
+				debug = 1;
+				verbose = 1;
+				break;
+			case 'd':
+				daemon = 1;
+				break;
+			case 'i':
+				interactive = 1;
+				break;
+			case 'p':
+				port = strtoul(optarg, &ep, 10);
+				if (*ep != '\0') {
+					fprintf(stderr, "Can't parse port!\n");
+					exit(EXIT_FAILURE);
+				}
+				break;
+			case 'v':
+				verbose = 1;
+				break;
+			case 'h':
+			case ':':
+			case '?':
+			default:
+				hmlan_syntax(argv[0]);
+				exit(EXIT_FAILURE);
+				break;
+		}
+	}
+	
+	if (interactive) {
+		return interactive_server();
+	} else {
+		return socket_server(port, daemon);
+	}
 }
