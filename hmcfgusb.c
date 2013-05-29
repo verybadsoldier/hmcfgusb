@@ -317,6 +317,8 @@ struct hmcfgusb_dev *hmcfgusb_init(hmcfgusb_cb_fn cb, void *data)
 
 	dev->n_pfd = dev->n_usb_pfd;
 
+	quit = 0;
+
 	return dev;
 }
 
