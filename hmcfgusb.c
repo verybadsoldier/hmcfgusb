@@ -214,21 +214,13 @@ static void LIBUSB_CALL hmcfgusb_interrupt(struct libusb_transfer *transfer)
 			quit = EIO;
 			return;
 		}
-
-		err = libusb_submit_transfer(transfer);
-		if (err != 0) {
-			fprintf(stderr, "Can't re-submit transfer: %s\n", usb_strerror(err));
-			free(transfer->buffer);
-			libusb_free_transfer(transfer);
-		}
-		return;
-	}
-
-	cb_data = transfer->user_data;
-	if (cb_data && cb_data->cb) {
-		cb_data->cb(transfer->buffer, transfer->actual_length, cb_data->data);
 	} else {
-		hexdump(transfer->buffer, transfer->actual_length, "RECV> ");
+		cb_data = transfer->user_data;
+		if (cb_data && cb_data->cb) {
+			cb_data->cb(transfer->buffer, transfer->actual_length, cb_data->data);
+		} else {
+			hexdump(transfer->buffer, transfer->actual_length, "RECV> ");
+		}
 	}
 
 	err = libusb_submit_transfer(transfer);
@@ -389,7 +381,7 @@ int hmcfgusb_poll(struct hmcfgusb_dev *dev, int timeout)
 		memset(&tv, 0, sizeof(tv));
 		err = libusb_handle_events_timeout_completed(NULL, &tv, NULL);
 		if (err < 0) {
-			fprintf(stderr, "libusb_handle_events_completed: %s\n", usb_strerror(err));
+			fprintf(stderr, "libusb_handle_events_timeout_completed: %s\n", usb_strerror(err));
 			errno = EIO;
 			return -1;
 		}
