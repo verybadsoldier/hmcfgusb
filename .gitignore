@@ -3,3 +3,6 @@ hmcfgusb.o
 hmland
 hmland.d
 hmland.o
+hmsniff
+hmsniff.d
+hmsniff.o
