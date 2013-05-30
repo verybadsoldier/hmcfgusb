@@ -29,10 +29,7 @@
 #include <strings.h>
 #include <poll.h>
 #include <errno.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
+#include <sys/time.h>
 #include <libusb-1.0/libusb.h>
 
 #include "hexdump.h"
@@ -95,7 +92,16 @@ char *hm_message_types(uint8_t type)
 
 static void dissect_hm(uint8_t *buf, int len)
 {
+	struct timeval tv;
+	struct tm *tmp;
+	char ts[32];
 	int i;
+
+	gettimeofday(&tv, NULL);
+	tmp = localtime(&tv.tv_sec);
+	memset(ts, 0, sizeof(ts));
+	strftime(ts, sizeof(ts)-1, "%Y-%m-%d %H:%M:%S", tmp);
+	printf("%s.%06ld: ", ts, tv.tv_usec);
 
 	for (i = 0; i < len; i++) {
 		printf("%02X", buf[i]);
