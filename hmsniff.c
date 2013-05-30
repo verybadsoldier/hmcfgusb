@@ -110,7 +110,7 @@ static void dissect_hm(uint8_t *buf, int len)
 	printf("\t\tFlags: ");
 	if (buf[2] & (1 << 0)) printf("WAKEUP ");
 	if (buf[2] & (1 << 1)) printf("WAKEMEUP ");
-	if (buf[2] & (1 << 2)) printf("BCAST ");
+	if (buf[2] & (1 << 2)) printf("CFG ");
 	if (buf[2] & (1 << 3)) printf("? ");
 	if (buf[2] & (1 << 4)) printf("BURST ");
 	if (buf[2] & (1 << 5)) printf("BIDI ");
