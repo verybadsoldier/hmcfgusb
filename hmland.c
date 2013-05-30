@@ -1,4 +1,4 @@
-/* HM-CFG-LAN emuldation for HM-CFG-USB
+/* HM-CFG-LAN emulation for HM-CFG-USB
  *
  * Copyright (c) 2013 Michael Gernoth <michael@gernoth.net>
  *
