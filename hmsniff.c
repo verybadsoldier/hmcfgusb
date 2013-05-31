@@ -134,8 +134,14 @@ static void dissect_hm(uint8_t *buf, int len)
 
 }
 
+struct recv_data {
+	int wrong_hmid;
+};
+
 static void parse_hmcfgusb(uint8_t *buf, int buf_len, void *data)
 {
+	struct recv_data *rdata = data;
+
 	if (buf_len < 1)
 		return;
 
@@ -144,6 +150,13 @@ static void parse_hmcfgusb(uint8_t *buf, int buf_len, void *data)
 			dissect_hm(buf + 13, buf[13] + 1);
 			break;
 		case 'H':
+			if ((buf[27] != 0x00) ||
+			    (buf[28] != 0x00) ||
+			    (buf[29] != 0x00)) {
+				printf("hmId is currently set to: %02x%02x%02x\n", buf[27], buf[28], buf[29]);
+				rdata->wrong_hmid = 1;
+			}
+			break;
 		case 'R':
 		case 'I':
 			break;
@@ -153,37 +166,51 @@ static void parse_hmcfgusb(uint8_t *buf, int buf_len, void *data)
 	}
 }
 
-
 int main(int argc, char **argv)
 {
 	struct hmcfgusb_dev *dev;
+	struct recv_data rdata;
 	int quit = 0;
 
 	hmcfgusb_set_debug(0);
 
-	dev = hmcfgusb_init(parse_hmcfgusb, NULL);
-	if (!dev) {
-		fprintf(stderr, "Can't initialize HM-CFG-USB!\n");
-		return EXIT_FAILURE;
-	}
+	do {
+		memset(&rdata, 0, sizeof(rdata));
+		rdata.wrong_hmid = 0;
 
-	hmcfgusb_send(dev, (unsigned char*)"A\00\00\00", 3, 1);
-
-	while(!quit) {
-		int fd;
-
-		fd = hmcfgusb_poll(dev, 3600);
-		if (fd >= 0) {
-			fprintf(stderr, "activity on unknown fd %d!\n", fd);
+		dev = hmcfgusb_init(parse_hmcfgusb, &rdata);
+		if (!dev) {
+			fprintf(stderr, "Can't initialize HM-CFG-USB, retrying in 1s...\n");
+			sleep(1);
 			continue;
-		} else if (fd == -1) {
-			if (errno) {
-				perror("hmcfgusb_poll");
-				quit = 1;
+		}
+		printf("HM-CFG-USB opened!\n");
+
+		hmcfgusb_send(dev, (unsigned char*)"K", 1, 1);
+
+		while(!quit) {
+			int fd;
+
+			if (rdata.wrong_hmid) {
+				printf("changing hmId to 000000, this might reboot the device!\n");
+				hmcfgusb_send(dev, (unsigned char*)"A\00\00\00", 4, 1);
+				rdata.wrong_hmid = 0;
+				hmcfgusb_send(dev, (unsigned char*)"K", 1, 1);
+			}
+			fd = hmcfgusb_poll(dev, 10);
+			if (fd >= 0) {
+				fprintf(stderr, "activity on unknown fd %d!\n", fd);
+				continue;
+			} else if (fd == -1) {
+				if (errno) {
+					perror("hmcfgusb_poll");
+					break;
+				}
 			}
 		}
-	}
 
-	hmcfgusb_close(dev);
+		hmcfgusb_close(dev);
+	} while (!quit);
+
 	return EXIT_SUCCESS;
 }
