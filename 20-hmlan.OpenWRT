@@ -1,0 +1,20 @@
+#!/bin/sh
+
+if [ "${PRODUCT:0:9}" = "1b1f/c00f" ]; then
+	logger "HMLAN: ${ACTION} ${PRODUCT}"
+
+	case "$ACTION" in
+		add)
+			if [ "`pidof hmland`" = "" ]; then
+				logger "Starting hmland"
+				hmland -d
+			fi
+			;;
+		remove)
+			if [ "`pidof hmland`" != "" ]; then
+				logger "Stopping hmland"
+				killall hmland
+			fi
+			;;
+	esac
+fi
