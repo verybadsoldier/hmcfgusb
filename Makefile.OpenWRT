@@ -22,6 +22,7 @@ define Package/hmcfgusb/install
 	$(INSTALL_DIR) $(1)/usr/bin/
 	$(INSTALL_BIN) $(PKG_BUILD_DIR)/hmland $(1)/usr/bin/
 	$(INSTALL_BIN) $(PKG_BUILD_DIR)/hmsniff $(1)/usr/bin/
+	$(INSTALL_DIR) $(1)/etc/hotplug.d/usb/
 	$(INSTALL_BIN) $(PKG_BUILD_DIR)/20-hmlan.OpenWRT $(1)/etc/hotplug.d/usb/20-hmlan
 endef
 
