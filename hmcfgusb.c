@@ -191,7 +191,6 @@ static struct libusb_transfer *hmcfgusb_prepare_int(libusb_device_handle *devh, 
 	if (err != 0) {
 		fprintf(stderr, "Can't submit transfer: %s\n", usb_strerror(err));
 		libusb_free_transfer(transfer);
-		free(data_buf);
 		return NULL;
 	}
 
