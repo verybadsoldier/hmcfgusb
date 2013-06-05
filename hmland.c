@@ -403,6 +403,7 @@ static int socket_server(int port, int daemon)
 
 	if (sigaction(SIGPIPE, &sact, NULL) == -1) {
 		perror("sigaction");
+		exit(EXIT_FAILURE);
 	}
 
 	impersonate_hmlanif = 1;
