@@ -28,6 +28,7 @@
 #include <string.h>
 #include <strings.h>
 #include <poll.h>
+#include <signal.h>
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -172,15 +173,16 @@ static int parse_part_in(uint8_t **inpos, int inlen, uint8_t **outpos, int outle
 	return *outpos - buf_out;
 }
 
-static void hmlan_format_out(uint8_t *buf, int buf_len, void *data)
+static int hmlan_format_out(uint8_t *buf, int buf_len, void *data)
 {
 	uint8_t out[1024];
 	uint8_t *outpos;
 	uint8_t *inpos;
 	int fd = *((int*)data);
+	int w;
 
 	if (buf_len < 1)
-		return;
+		return 1;
 
 	memset(out, 0, sizeof(out));
 	outpos = out;
@@ -233,9 +235,16 @@ static void hmlan_format_out(uint8_t *buf, int buf_len, void *data)
 			hexdump(buf, buf_len, "Unknown> ");
 			break;
 	}
-	write(fd, out, outpos-out);
 	if (debug)
 		fprintf(stderr, "LAN < %s\n", out);
+
+	w = write(fd, out, outpos-out);
+	if (w <= 0) {
+		perror("write");
+		return 0;
+	}
+
+	return 1;
 }
 
 static int hmlan_parse_in(int fd, void *data)
@@ -372,6 +381,7 @@ static int comm(int fd_in, int fd_out, int master_socket)
 
 static int socket_server(int port, int daemon)
 {
+	struct sigaction sact;
 	struct sockaddr_in sin;
 	int sock;
 	int n;
@@ -386,6 +396,13 @@ static int socket_server(int port, int daemon)
 			perror("fork");
 			exit(EXIT_FAILURE);
 		}
+	}
+
+	memset(&sact, 0, sizeof(sact));
+	sact.sa_handler = SIG_IGN;
+
+	if (sigaction(SIGPIPE, &sact, NULL) == -1) {
+		perror("sigaction");
 	}
 
 	impersonate_hmlanif = 1;

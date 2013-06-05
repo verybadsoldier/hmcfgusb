@@ -21,7 +21,7 @@
  * IN THE SOFTWARE.
  */
 
-typedef void (*hmcfgusb_cb_fn)(uint8_t *buf, int buf_len, void *data);
+typedef int (*hmcfgusb_cb_fn)(uint8_t *buf, int buf_len, void *data);
 
 struct hmcfgusb_dev {
 	libusb_device_handle *usb_devh;

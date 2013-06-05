@@ -225,7 +225,17 @@ static void LIBUSB_CALL hmcfgusb_interrupt(struct libusb_transfer *transfer)
 		if (cb_data && cb_data->cb) {
 			if (debug)
 				hexdump(transfer->buffer, transfer->actual_length, "USB > ");
-			cb_data->cb(transfer->buffer, transfer->actual_length, cb_data->data);
+
+			if (!cb_data->cb(transfer->buffer, transfer->actual_length, cb_data->data)) {
+				quit = EIO;
+
+				if (cb_data && cb_data->dev && cb_data->dev->transfer) {
+					libusb_free_transfer(cb_data->dev->transfer);
+					cb_data->dev->transfer = NULL;
+				}
+
+				return;
+			}
 		} else {
 			hexdump(transfer->buffer, transfer->actual_length, "> ");
 		}

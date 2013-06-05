@@ -138,12 +138,12 @@ struct recv_data {
 	int wrong_hmid;
 };
 
-static void parse_hmcfgusb(uint8_t *buf, int buf_len, void *data)
+static int parse_hmcfgusb(uint8_t *buf, int buf_len, void *data)
 {
 	struct recv_data *rdata = data;
 
 	if (buf_len < 1)
-		return;
+		return 1;
 
 	switch(buf[0]) {
 		case 'E':
@@ -164,6 +164,8 @@ static void parse_hmcfgusb(uint8_t *buf, int buf_len, void *data)
 			hexdump(buf, buf_len, "Unknown> ");
 			break;
 	}
+
+	return 1;
 }
 
 int main(int argc, char **argv)
