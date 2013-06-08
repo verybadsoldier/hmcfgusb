@@ -379,7 +379,7 @@ static int comm(int fd_in, int fd_out, int master_socket)
 	return 1;
 }
 
-static int socket_server(int port, int daemon)
+static int socket_server(char *iface, int port, int daemon)
 {
 	struct sigaction sact;
 	struct sockaddr_in sin;
@@ -423,7 +423,14 @@ static int socket_server(int port, int daemon)
 	memset(&sin, 0, sizeof(sin));
 	sin.sin_family = AF_INET;
 	sin.sin_port = htons(port);
-	sin.sin_addr.s_addr = htonl(INADDR_ANY);
+	if (!iface) {
+		sin.sin_addr.s_addr = htonl(INADDR_ANY);
+	} else {
+		if (inet_pton(AF_INET, iface, &(sin.sin_addr.s_addr)) != 1) {
+			perror("inet_ntop");
+			return EXIT_FAILURE;
+		}
+	}
 
 	if (bind(sock, (struct sockaddr*)&sin, sizeof(sin)) == -1) {
 		perror("Can't bind socket");
@@ -494,6 +501,7 @@ void hmlan_syntax(char *prog)
 	fprintf(stderr, "\t-d\tdaemon mode\n");
 	fprintf(stderr, "\t-h\tthis help\n");
 	fprintf(stderr, "\t-i\tinteractive mode (connect HM-CFG-USB to terminal)\n");
+	fprintf(stderr, "\t-l ip\tlisten on given IP address only (for example 127.0.0.1)\n");
 	fprintf(stderr, "\t-p n\tlisten on port n (default 1000)\n");
 	fprintf(stderr, "\t-v\tverbose mode\n");
 
@@ -502,12 +510,13 @@ void hmlan_syntax(char *prog)
 int main(int argc, char **argv)
 {
 	int port = 1000;
+	char *iface = NULL;
 	int interactive = 0;
 	int daemon = 0;
 	char *ep;
 	int opt;
 
-	while((opt = getopt(argc, argv, "Ddhip:v")) != -1) {
+	while((opt = getopt(argc, argv, "Ddhip:l:v")) != -1) {
 		switch (opt) {
 			case 'D':
 				debug = 1;
@@ -526,6 +535,9 @@ int main(int argc, char **argv)
 					exit(EXIT_FAILURE);
 				}
 				break;
+			case 'l':
+				iface = optarg;
+				break;
 			case 'v':
 				verbose = 1;
 				break;
@@ -542,6 +554,6 @@ int main(int argc, char **argv)
 	if (interactive) {
 		return interactive_server();
 	} else {
-		return socket_server(port, daemon);
+		return socket_server(iface, port, daemon);
 	}
 }
