@@ -218,6 +218,7 @@ static void LIBUSB_CALL hmcfgusb_interrupt(struct libusb_transfer *transfer)
 			if (cb_data && cb_data->dev && cb_data->dev->transfer) {
 				libusb_free_transfer(cb_data->dev->transfer);
 				cb_data->dev->transfer = NULL;
+				free(cb_data);
 			}
 			return;
 		}
@@ -232,6 +233,7 @@ static void LIBUSB_CALL hmcfgusb_interrupt(struct libusb_transfer *transfer)
 				if (cb_data && cb_data->dev && cb_data->dev->transfer) {
 					libusb_free_transfer(cb_data->dev->transfer);
 					cb_data->dev->transfer = NULL;
+					free(cb_data);
 				}
 
 				return;
@@ -245,6 +247,8 @@ static void LIBUSB_CALL hmcfgusb_interrupt(struct libusb_transfer *transfer)
 	if (err != 0) {
 		fprintf(stderr, "Can't re-submit transfer: %s\n", usb_strerror(err));
 		libusb_free_transfer(transfer);
+		cb_data->dev->transfer = NULL;
+		free(cb_data);
 	}
 }
 
@@ -281,6 +285,7 @@ struct hmcfgusb_dev *hmcfgusb_init(hmcfgusb_cb_fn cb, void *data)
 	cb_data = malloc(sizeof(struct hmcfgusb_cb_data));
 	if (!cb_data) {
 		perror("Can't allocate memory for hmcfgusb_cb_data");
+		free(dev);
 		return NULL;
 	}
 
@@ -293,6 +298,8 @@ struct hmcfgusb_dev *hmcfgusb_init(hmcfgusb_cb_fn cb, void *data)
 	dev->transfer = hmcfgusb_prepare_int(devh, hmcfgusb_interrupt, cb_data);
 	if (!dev->transfer) {
 		fprintf(stderr, "Can't prepare async device io!\n");
+		free(dev);
+		free(cb_data);
 		return NULL;
 	}
 
@@ -300,6 +307,7 @@ struct hmcfgusb_dev *hmcfgusb_init(hmcfgusb_cb_fn cb, void *data)
 	if (!usb_pfd) {
 		fprintf(stderr, "Can't get FDset from libusb!\n");
 		free(dev);
+		free(cb_data);
 		return NULL;
 	}
 
@@ -310,6 +318,8 @@ struct hmcfgusb_dev *hmcfgusb_init(hmcfgusb_cb_fn cb, void *data)
 	dev->pfd = malloc(dev->n_usb_pfd * sizeof(struct pollfd));
 	if (!dev->pfd) {
 		perror("Can't allocate memory for poll-fds");
+		free(dev);
+		free(cb_data);
 		return NULL;
 	}
 
