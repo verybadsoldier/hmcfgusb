@@ -1,5 +1,6 @@
 CFLAGS=-MMD -O2 -Wall -I/opt/local/include -g
-LDFLAGS=-L/opt/local/lib -lusb-1.0 -lm
+LDFLAGS=-L/opt/local/lib
+LDLIBS=-lusb-1.0
 CC=gcc
 
 HMLAN_OBJS=hmcfgusb.o hmland.o
