@@ -32,12 +32,15 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <libusb-1.0/libusb.h>
 
 #include "hexdump.h"
 #include "hmcfgusb.h"
+
+#define PID_FILE "/var/run/hmland.pid"
 
 extern char *optarg;
 
@@ -379,7 +382,18 @@ static int comm(int fd_in, int fd_out, int master_socket)
 	return 1;
 }
 
-static int socket_server(char *iface, int port, int daemon)
+void sigterm_handler(int sig)
+{
+	if (unlink(PID_FILE) == -1)
+		perror("Can't remove PID file");
+
+	exit(EXIT_SUCCESS);
+}
+
+#define FLAG_DAEMON	(1 << 0)
+#define FLAG_PID_FILE	(1 << 1)
+
+static int socket_server(char *iface, int port, int flags)
 {
 	struct sigaction sact;
 	struct sockaddr_in sin;
@@ -387,22 +401,53 @@ static int socket_server(char *iface, int port, int daemon)
 	int n;
 	pid_t pid;
 
-	if (daemon) {
+	if (flags & FLAG_DAEMON) {
+		FILE *pidfile = NULL;
+
+		if (flags & FLAG_PID_FILE) {
+			mode_t old_umask;
+
+			old_umask = umask(022);
+			pidfile = fopen(PID_FILE, "w");
+			umask(old_umask);
+
+			if (!pidfile) {
+				perror("Can't create PID file " PID_FILE);
+				exit(EXIT_FAILURE);
+			}
+
+			memset(&sact, 0, sizeof(sact));
+			sact.sa_handler = sigterm_handler;
+
+			if (sigaction(SIGTERM, &sact, NULL) == -1) {
+				perror("sigaction(SIGTERM)");
+				exit(EXIT_FAILURE);
+			}
+		}
+
 		pid = fork();
 		if (pid > 0) {
+			if (pidfile) {
+				fprintf(pidfile, "%u\n", pid);
+				fclose(pidfile);
+			}
+
 			printf("Daemon with PID %u started!\n", pid);
 			exit(EXIT_SUCCESS);
 		} else if (pid < 0) {
 			perror("fork");
 			exit(EXIT_FAILURE);
 		}
+
+		if (pidfile)
+			fclose(pidfile);
 	}
 
 	memset(&sact, 0, sizeof(sact));
 	sact.sa_handler = SIG_IGN;
 
 	if (sigaction(SIGPIPE, &sact, NULL) == -1) {
-		perror("sigaction");
+		perror("sigaction(SIGPIPE)");
 		exit(EXIT_FAILURE);
 	}
 
@@ -502,6 +547,7 @@ void hmlan_syntax(char *prog)
 	fprintf(stderr, "\t-h\tthis help\n");
 	fprintf(stderr, "\t-i\tinteractive mode (connect HM-CFG-USB to terminal)\n");
 	fprintf(stderr, "\t-l ip\tlisten on given IP address only (for example 127.0.0.1)\n");
+	fprintf(stderr, "\t-P\tcreate PID file " PID_FILE " in daemon mode\n");
 	fprintf(stderr, "\t-p n\tlisten on port n (default 1000)\n");
 	fprintf(stderr, "\t-v\tverbose mode\n");
 
@@ -512,21 +558,24 @@ int main(int argc, char **argv)
 	int port = 1000;
 	char *iface = NULL;
 	int interactive = 0;
-	int daemon = 0;
+	int flags = 0;
 	char *ep;
 	int opt;
 
-	while((opt = getopt(argc, argv, "Ddhip:l:v")) != -1) {
+	while((opt = getopt(argc, argv, "DdhiPp:l:v")) != -1) {
 		switch (opt) {
 			case 'D':
 				debug = 1;
 				verbose = 1;
 				break;
 			case 'd':
-				daemon = 1;
+				flags |= FLAG_DAEMON;
 				break;
 			case 'i':
 				interactive = 1;
+				break;
+			case 'P':
+				flags |= FLAG_PID_FILE;
 				break;
 			case 'p':
 				port = strtoul(optarg, &ep, 10);
@@ -554,6 +603,6 @@ int main(int argc, char **argv)
 	if (interactive) {
 		return interactive_server();
 	} else {
-		return socket_server(iface, port, daemon);
+		return socket_server(iface, port, flags);
 	}
 }
