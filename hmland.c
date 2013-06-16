@@ -33,6 +33,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <fcntl.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <libusb-1.0/libusb.h>
@@ -405,14 +406,36 @@ static int socket_server(char *iface, int port, int flags)
 		FILE *pidfile = NULL;
 
 		if (flags & FLAG_PID_FILE) {
-			mode_t old_umask;
+			int fd;
 
-			old_umask = umask(022);
-			pidfile = fopen(PID_FILE, "w");
-			umask(old_umask);
+			fd = open(PID_FILE, O_CREAT | O_EXCL | O_WRONLY, 0644);
+			if (fd == -1) {
+				if (errno == EEXIST) {
+					pid_t old_pid;
+					pidfile = fopen(PID_FILE, "r");
+					if (!pidfile) {
+						perror("PID file " PID_FILE " already exists, already running?");
+						exit(EXIT_FAILURE);
+					}
 
-			if (!pidfile) {
+					if (fscanf(pidfile, "%u", &old_pid) != 1) {
+						fclose(pidfile);
+						fprintf(stderr, "Can't read old PID from " PID_FILE ", already running?\n");
+						exit(EXIT_FAILURE);
+					}
+
+					fclose(pidfile);
+
+					fprintf(stderr, "Already running with PID %u according to " PID_FILE "!\n", old_pid);
+					exit(EXIT_FAILURE);
+				}
 				perror("Can't create PID file " PID_FILE);
+				exit(EXIT_FAILURE);
+			}
+
+			pidfile = fdopen(fd, "w");
+			if (!pidfile) {
+				perror("Can't reopen PID file fd");
 				exit(EXIT_FAILURE);
 			}
 
