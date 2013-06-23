@@ -298,7 +298,7 @@ static int hmlan_parse_in(int fd, void *data)
 			memset(out, 0, sizeof(out));
 			*outpos++ = *inpos++;
 
-			switch(buf[0]) {
+			switch(*instart) {
 				case 'S':
 					parse_part_in(&inpos, (last-(inpos-instart)), &outpos, (sizeof(out)-(outpos-out)), 0);
 					parse_part_in(&inpos, (last-(inpos-instart)), &outpos, (sizeof(out)-(outpos-out)), 0);
