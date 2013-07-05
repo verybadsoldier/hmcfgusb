@@ -29,6 +29,7 @@
 #include <math.h>
 #include <poll.h>
 #include <errno.h>
+#include <sys/time.h>
 #include <libusb-1.0/libusb.h>
 
 #include "hexdump.h"
@@ -143,9 +144,14 @@ int hmcfgusb_send(struct hmcfgusb_dev *usbdev, unsigned char* send_data, int len
 {
 	int err;
 	int cnt;
+	struct timeval tv_start, tv_end;
+	int msec;
 
-	if (debug)
+	if (debug) {
 		hexdump(send_data, len, "USB < ");
+		gettimeofday(&tv_start, NULL);
+	}
+
 	err = libusb_interrupt_transfer(usbdev->usb_devh, EP_OUT, send_data, len, &cnt, USB_TIMEOUT);
 	if (err) {
 		fprintf(stderr, "Can't send data: %s\n", usb_strerror(err));
@@ -158,6 +164,12 @@ int hmcfgusb_send(struct hmcfgusb_dev *usbdev, unsigned char* send_data, int len
 			fprintf(stderr, "Can't send data: %s\n", usb_strerror(err));
 			return 0;
 		}
+	}
+
+	if (debug) {
+		gettimeofday(&tv_end, NULL);
+		msec = ((tv_end.tv_sec-tv_start.tv_sec)*1000)+((tv_end.tv_usec-tv_start.tv_usec)/1000);
+		fprintf(stderr, "send took %dms!\n", msec);
 	}
 
 	return 1;
