@@ -55,6 +55,7 @@ static int verbose = 0;
 #define	FLAG_COMMA_AFTER	(1<<3)
 #define	FLAG_NL			(1<<4)
 #define	FLAG_IGNORE_COMMAS	(1<<5)
+#define	FLAG_PERIODIC_WAKEUP	(1<<6)
 
 #define CHECK_SPACE(x)		if ((*outpos + x) > outend) { fprintf(stderr, "Not enough space!\n"); return 0; }
 #define CHECK_AVAIL(x)		if ((*inpos + x) > inend) { fprintf(stderr, "Not enough input available!\n"); return 0; }
@@ -324,9 +325,11 @@ static int hmlan_parse_in(int fd, void *data)
 	return 1;
 }
 
-static int comm(int fd_in, int fd_out, int master_socket)
+static int comm(int fd_in, int fd_out, int master_socket, int flags)
 {
 	struct hmcfgusb_dev *dev;
+	uint8_t out[0x40]; //FIXME!!!
+	int poll_timeout = 3600;
 	int quit = 0;
 
 	hmcfgusb_set_debug(debug);
@@ -351,12 +354,17 @@ static int comm(int fd_in, int fd_out, int master_socket)
 		}
 	}
 
-	hmcfgusb_send(dev, (unsigned char*)"K", 1, 1);
+	if (flags & FLAG_PERIODIC_WAKEUP)
+		poll_timeout = 1;
+
+	memset(out, 0, sizeof(out));
+	out[0] = 'K';
+	hmcfgusb_send(dev, out, sizeof(out), 1);
 
 	while(!quit) {
 		int fd;
 
-		fd = hmcfgusb_poll(dev, 3600);
+		fd = hmcfgusb_poll(dev, poll_timeout);
 		if (fd >= 0) {
 			if (fd == master_socket) {
 				int client;
@@ -375,6 +383,9 @@ static int comm(int fd_in, int fd_out, int master_socket)
 			if (errno) {
 				perror("hmcfgusb_poll");
 				quit = 1;
+			} else {
+				/* periodically wakeup the device */
+				hmcfgusb_send_null_frame(dev);
 			}
 		}
 	}
@@ -535,7 +546,7 @@ static int socket_server(char *iface, int port, int flags)
 					(client_addr & 0x000000ff));
 		}
 
-		comm(client, client, sock);
+		comm(client, client, sock, flags);
 
 		shutdown(client, SHUT_RDWR);
 		close(client);
@@ -553,9 +564,9 @@ static int socket_server(char *iface, int port, int flags)
 	return EXIT_SUCCESS;
 }
 
-static int interactive_server(void)
+static int interactive_server(int flags)
 {
-	if (!comm(STDIN_FILENO, STDOUT_FILENO, -1))
+	if (!comm(STDIN_FILENO, STDOUT_FILENO, -1, flags))
 		return EXIT_FAILURE;
 
 	return EXIT_SUCCESS;
@@ -572,6 +583,7 @@ void hmlan_syntax(char *prog)
 	fprintf(stderr, "\t-l ip\tlisten on given IP address only (for example 127.0.0.1)\n");
 	fprintf(stderr, "\t-P\tcreate PID file " PID_FILE " in daemon mode\n");
 	fprintf(stderr, "\t-p n\tlisten on port n (default 1000)\n");
+	fprintf(stderr, "\t-R\twakeup the device (and USB-bus) every second (fix for e.g. Raspberry Pi)\n");
 	fprintf(stderr, "\t-v\tverbose mode\n");
 
 }
@@ -585,7 +597,7 @@ int main(int argc, char **argv)
 	char *ep;
 	int opt;
 
-	while((opt = getopt(argc, argv, "DdhiPp:l:v")) != -1) {
+	while((opt = getopt(argc, argv, "DdhiPp:Rl:v")) != -1) {
 		switch (opt) {
 			case 'D':
 				debug = 1;
@@ -607,6 +619,9 @@ int main(int argc, char **argv)
 					exit(EXIT_FAILURE);
 				}
 				break;
+			case 'R':
+				flags |= FLAG_PERIODIC_WAKEUP;
+				break;
 			case 'l':
 				iface = optarg;
 				break;
@@ -624,7 +639,7 @@ int main(int argc, char **argv)
 	}
 	
 	if (interactive) {
-		return interactive_server();
+		return interactive_server(flags);
 	} else {
 		return socket_server(iface, port, flags);
 	}
