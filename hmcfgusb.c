@@ -140,6 +140,20 @@ static libusb_device_handle *hmcfgusb_find() {
 	return NULL;
 }
 
+int hmcfgusb_send_null_frame(struct hmcfgusb_dev *usbdev)
+{
+	int err;
+	int cnt;
+
+	err = libusb_interrupt_transfer(usbdev->usb_devh, EP_OUT, NULL, 0, &cnt, USB_TIMEOUT);
+	if (err) {
+		fprintf(stderr, "Can't send data: %s\n", usb_strerror(err));
+		return 0;
+	}
+
+	return 1;
+}
+
 int hmcfgusb_send(struct hmcfgusb_dev *usbdev, unsigned char* send_data, int len, int done)
 {
 	int err;
@@ -159,9 +173,7 @@ int hmcfgusb_send(struct hmcfgusb_dev *usbdev, unsigned char* send_data, int len
 	}
 
 	if (done) {
-		err = libusb_interrupt_transfer(usbdev->usb_devh, EP_OUT, send_data, 0, &cnt, USB_TIMEOUT);
-		if (err) {
-			fprintf(stderr, "Can't send data: %s\n", usb_strerror(err));
+		if (!hmcfgusb_send_null_frame(usbdev)) {
 			return 0;
 		}
 	}
