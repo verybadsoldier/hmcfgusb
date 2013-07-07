@@ -359,6 +359,7 @@ static int comm(int fd_in, int fd_out, int master_socket, int flags)
 
 	memset(out, 0, sizeof(out));
 	out[0] = 'K';
+	hmcfgusb_send_null_frame(dev);
 	hmcfgusb_send(dev, out, sizeof(out), 1);
 
 	while(!quit) {
@@ -558,7 +559,7 @@ static int socket_server(char *iface, int port, int flags)
 					(client_addr & 0x0000ff00) >> 8,
 					(client_addr & 0x000000ff));
 		}
-
+		sleep(1);
 	}
 
 	return EXIT_SUCCESS;

@@ -183,8 +183,7 @@ int hmcfgusb_send(struct hmcfgusb_dev *usbdev, unsigned char* send_data, int len
 	msec = ((tv_end.tv_sec-tv_start.tv_sec)*1000)+((tv_end.tv_usec-tv_start.tv_usec)/1000);
 
 	if (msec > 100) {
-		if (debug)
-			fprintf(stderr, "usb-transfer took more than 100ms (%dms), this can lead to timing problems!\n", msec);
+		fprintf(stderr, "usb-transfer took more than 100ms (%dms), this can lead to timing problems!\n", msec);
 	} else if (debug) {
 		fprintf(stderr, "usb-transfer took %dms!\n", msec);
 	}

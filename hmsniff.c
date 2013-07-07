@@ -188,6 +188,7 @@ int main(int argc, char **argv)
 		}
 		printf("HM-CFG-USB opened!\n");
 
+		hmcfgusb_send_null_frame(dev);
 		hmcfgusb_send(dev, (unsigned char*)"K", 1, 1);
 
 		while(!quit) {
@@ -199,7 +200,7 @@ int main(int argc, char **argv)
 				rdata.wrong_hmid = 0;
 				hmcfgusb_send(dev, (unsigned char*)"K", 1, 1);
 			}
-			fd = hmcfgusb_poll(dev, 10);
+			fd = hmcfgusb_poll(dev, 1);
 			if (fd >= 0) {
 				fprintf(stderr, "activity on unknown fd %d!\n", fd);
 				continue;
@@ -207,6 +208,9 @@ int main(int argc, char **argv)
 				if (errno) {
 					perror("hmcfgusb_poll");
 					break;
+				} else {
+					/* periodically wakeup the device */
+					hmcfgusb_send_null_frame(dev);
 				}
 			}
 		}
