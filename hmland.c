@@ -55,7 +55,6 @@ static int verbose = 0;
 #define	FLAG_COMMA_AFTER	(1<<3)
 #define	FLAG_NL			(1<<4)
 #define	FLAG_IGNORE_COMMAS	(1<<5)
-#define	FLAG_PERIODIC_WAKEUP	(1<<6)
 
 #define CHECK_SPACE(x)		if ((*outpos + x) > outend) { fprintf(stderr, "Not enough space!\n"); return 0; }
 #define CHECK_AVAIL(x)		if ((*inpos + x) > inend) { fprintf(stderr, "Not enough input available!\n"); return 0; }
@@ -329,7 +328,6 @@ static int comm(int fd_in, int fd_out, int master_socket, int flags)
 {
 	struct hmcfgusb_dev *dev;
 	uint8_t out[0x40]; //FIXME!!!
-	int poll_timeout = 3600;
 	int quit = 0;
 
 	hmcfgusb_set_debug(debug);
@@ -354,9 +352,6 @@ static int comm(int fd_in, int fd_out, int master_socket, int flags)
 		}
 	}
 
-	if (flags & FLAG_PERIODIC_WAKEUP)
-		poll_timeout = 1;
-
 	memset(out, 0, sizeof(out));
 	out[0] = 'K';
 	hmcfgusb_send_null_frame(dev);
@@ -365,7 +360,7 @@ static int comm(int fd_in, int fd_out, int master_socket, int flags)
 	while(!quit) {
 		int fd;
 
-		fd = hmcfgusb_poll(dev, poll_timeout);
+		fd = hmcfgusb_poll(dev, 1);	/* Wakeup device/bus at least once a second */
 		if (fd >= 0) {
 			if (fd == master_socket) {
 				int client;
@@ -584,7 +579,6 @@ void hmlan_syntax(char *prog)
 	fprintf(stderr, "\t-l ip\tlisten on given IP address only (for example 127.0.0.1)\n");
 	fprintf(stderr, "\t-P\tcreate PID file " PID_FILE " in daemon mode\n");
 	fprintf(stderr, "\t-p n\tlisten on port n (default 1000)\n");
-	fprintf(stderr, "\t-R\twakeup the device (and USB-bus) every second (fix for e.g. Raspberry Pi)\n");
 	fprintf(stderr, "\t-v\tverbose mode\n");
 
 }
@@ -621,7 +615,7 @@ int main(int argc, char **argv)
 				}
 				break;
 			case 'R':
-				flags |= FLAG_PERIODIC_WAKEUP;
+				fprintf(stderr, "-R is no longer needed (1s wakeup is default)\n");
 				break;
 			case 'l':
 				iface = optarg;
