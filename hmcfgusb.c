@@ -407,6 +407,9 @@ int hmcfgusb_poll(struct hmcfgusb_dev *dev, int timeout)
 	} else {
 		if ((tv.tv_sec == 0) && (tv.tv_usec == 0)) {
 			usb_event = 1;
+		} else if (tv.tv_sec > timeout) {
+			tv.tv_sec = timeout;
+			tv.tv_usec = 0;
 		}
 	}
 
