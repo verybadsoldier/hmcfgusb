@@ -311,6 +311,7 @@ static int hmlan_parse_in(int fd, void *data)
 					parse_part_in(&inpos, (last-(inpos-instart)), &outpos, (sizeof(out)-(outpos-out)), 0);
 					parse_part_in(&inpos, (last-(inpos-instart)), &outpos, (sizeof(out)-(outpos-out)), 0);
 					parse_part_in(&inpos, (last-(inpos-instart)), &outpos, (sizeof(out)-(outpos-out)), FLAG_LENGTH_BYTE);
+					break;
 				default:
 					parse_part_in(&inpos, (last-(inpos-instart)), &outpos, (sizeof(out)-(outpos-out)), FLAG_IGNORE_COMMAS);
 					break;
