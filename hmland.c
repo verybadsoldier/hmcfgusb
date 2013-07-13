@@ -239,8 +239,13 @@ static int hmlan_format_out(uint8_t *buf, int buf_len, void *data)
 			hexdump(buf, buf_len, "Unknown> ");
 			break;
 	}
-	if (debug)
-		fprintf(stderr, "LAN < %s\n", out);
+	if (verbose) {
+		int i;
+
+		printf("LAN < ");
+		for (i = 0; i < outpos-out; i++)
+			printf("%c", out[i]);
+	}
 
 	w = write(fd, out, outpos-out);
 	if (w <= 0) {
@@ -270,9 +275,6 @@ static int hmlan_parse_in(int fd, void *data)
 
 		inpos = buf;
 
-		if (debug)
-			fprintf(stderr, "\nLAN > %s", buf);
-
 		while (inpos < inend) {
 			uint8_t *instart = inpos;
 
@@ -294,6 +296,13 @@ static int hmlan_parse_in(int fd, void *data)
 
 			if (last == 0)
 				continue;
+
+			if (verbose) {
+				printf("LAN > ");
+				for (i = 0; i < last; i++)
+					printf("%c", instart[i]);
+				printf("\n");
+			}
 
 			memset(out, 0, sizeof(out));
 			*outpos++ = *inpos++;
