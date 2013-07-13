@@ -39,6 +39,7 @@
 
 #define ID_VENDOR	0x1b1f
 #define ID_PRODUCT	0xc00f
+#define ID_PRODUCT_BL	0xc010
 
 /* TODO: dynamic */
 #define ASYNC_SIZE	0x0040
@@ -111,7 +112,8 @@ static libusb_device_handle *hmcfgusb_find() {
 		if (err)
 			continue;
 
-		if ((desc.idVendor == ID_VENDOR) && (desc.idProduct == ID_PRODUCT)) {
+		if ((desc.idVendor == ID_VENDOR) &&
+		    ((desc.idProduct == ID_PRODUCT) || (desc.idProduct == ID_PRODUCT_BL))) {
 			libusb_device *dev = list[i];
 
 			err = libusb_open(dev, &devh);
