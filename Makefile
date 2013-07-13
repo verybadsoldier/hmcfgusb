@@ -5,8 +5,9 @@ CC=gcc
 
 HMLAN_OBJS=hmcfgusb.o hmland.o
 HMSNIFF_OBJS=hmcfgusb.o hmsniff.o
+FLASH_HMCFGUSB_OBJS=hmcfgusb.o flash-hmcfgusb.o
 
-OBJS=$(HMLAN_OBJS) $(HMSNIFF_OBJS)
+OBJS=$(HMLAN_OBJS) $(HMSNIFF_OBJS) $(FLASH_HMCFGUSB_OBJS)
 
 all: hmland hmsniff
 
@@ -17,7 +18,9 @@ hmland: $(HMLAN_OBJS)
 
 hmsniff: $(HMSNIFF_OBJS)
 
+flash-hmcfgusb: $(FLASH_HMCFGUSB_OBJS)
+
 clean:
-	rm -f $(HMLAN_OBJS) $(HMSNIFF_OBJS) $(DEPEND) hmland hmsniff
+	rm -f $(HMLAN_OBJS) $(HMSNIFF_OBJS) $(FLASH_HMCFGUSB_OBJS) $(DEPEND) hmland hmsniff flash-hmcfgusb
 
 .PHONY: all clean
