@@ -79,12 +79,14 @@ int main(int argc, char **argv)
 {
 	struct hmcfgusb_dev *dev;
 	struct recv_data rdata;
-	uint8_t out[0x40]; //FIXME!!!
-	uint8_t buf[0x80];
+	uint8_t out[4096];
+	uint8_t buf[4096];
+	uint8_t *outp;
 	int fd;
 	int r;
 	int i;
 	int cnt;
+	int pkt;
 
 	hmcfgusb_set_debug(0);
 
@@ -104,23 +106,56 @@ int main(int argc, char **argv)
 	}
 
 	cnt = 0;
+	pkt = 0;
 	do {
+		int len;
+
 		memset(buf, 0, sizeof(buf));
-		r = read(fd, buf, sizeof(buf));
+		r = read(fd, buf, 4);
 		if (r < 0) {
 			perror("read");
 			exit(EXIT_FAILURE);
 		} else if (r == 0) {
 			break;
+		} else if (r != 4) {
+			printf("can't get length information!\n");
+			exit(EXIT_FAILURE);
 		}
+
+		len = (ascii_to_nibble(buf[0]) & 0xf)<< 4;
+		len |= ascii_to_nibble(buf[1]) & 0xf;
+		len <<= 8;
+		len |= (ascii_to_nibble(buf[2]) & 0xf)<< 4;
+		len |= ascii_to_nibble(buf[3]) & 0xf;
+
+		printf("packet length: %x\n", len);
+
+		r = read(fd, buf, len * 2);
+		if (r < 0) {
+			perror("read");
+			exit(EXIT_FAILURE);
+		} else if (r < len * 2) {
+			printf("short read, aborting (%d < %d)\n", r, len * 2);
+			break;
+		}
+
 		memset(out, 0, sizeof(out));
+		outp = out;
+		*outp++ = 'W';
+		*outp++ = (pkt >> 8) & 0xff;
+		*outp++ = pkt & 0xff;
+		*outp++ = (len >> 8) & 0xff;
+		*outp++ = len & 0xff;
 		for (i = 0; i < r; i+=2) {
-			out[i/2] = (ascii_to_nibble(buf[i]) & 0xf)<< 4;
-			out[i/2] |= ascii_to_nibble(buf[i+1]) & 0xf;
+			*outp = (ascii_to_nibble(buf[i]) & 0xf)<< 4;
+			*outp |= ascii_to_nibble(buf[i+1]) & 0xf;
+			outp++;
 		}
 		cnt += r/2;
 		printf("Flashing %d bytes...\n", cnt);
-		hmcfgusb_send(dev, out, r/2, 1);
+		hexdump(out, outp-out, "F> ");
+		//hmcfgusb_send(dev, out, r/2, 1);
+		pkt++;
 	} while (r > 0);
 
 	hmcfgusb_close(dev);
