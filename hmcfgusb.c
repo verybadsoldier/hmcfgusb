@@ -146,8 +146,11 @@ int hmcfgusb_send_null_frame(struct hmcfgusb_dev *usbdev, int silent)
 {
 	int err;
 	int cnt;
+	unsigned char out[0x40];
 
-	err = libusb_interrupt_transfer(usbdev->usb_devh, EP_OUT, NULL, 0, &cnt, USB_TIMEOUT);
+	memset(out, 0, sizeof(out));
+
+	err = libusb_interrupt_transfer(usbdev->usb_devh, EP_OUT, out, sizeof(out), &cnt, USB_TIMEOUT);
 	if (err && (!silent)) {
 		fprintf(stderr, "Can't send null frame: %s\n", usb_strerror(err));
 		return 0;
