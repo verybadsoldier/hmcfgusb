@@ -34,6 +34,7 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <time.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <libusb-1.0/libusb.h>
@@ -67,6 +68,19 @@ static int wait_for_h = 0;
 
 #define CHECK_SPACE(x)		if ((*outpos + x) > outend) { fprintf(stderr, "Not enough space!\n"); return 0; }
 #define CHECK_AVAIL(x)		if ((*inpos + x) > inend) { fprintf(stderr, "Not enough input available!\n"); return 0; }
+
+static void print_timestamp(FILE *f)
+{
+	struct timeval tv;
+	struct tm *tmp;
+	char ts[32];
+
+	gettimeofday(&tv, NULL);
+	tmp = localtime(&tv.tv_sec);
+	memset(ts, 0, sizeof(ts));
+	strftime(ts, sizeof(ts)-1, "%Y-%m-%d %H:%M:%S", tmp);
+	fprintf(f, "%s.%06ld: ", ts, tv.tv_usec);
+}
 
 static int format_part_out(uint8_t **inpos, int inlen, uint8_t **outpos, int outlen, int len, int flags)
 {
@@ -278,6 +292,7 @@ static int hmlan_format_out(uint8_t *buf, int buf_len, void *data)
 	if (verbose) {
 		int i;
 
+		print_timestamp(stdout);
 		printf("LAN < ");
 		for (i = 0; i < outpos-out-2; i++)
 			printf("%c", out[i]);
@@ -299,6 +314,7 @@ static int hmlan_format_out(uint8_t *buf, int buf_len, void *data)
 			if (verbose) {
 				int i;
 
+				print_timestamp(stdout);
 				printf("LAN < ");
 				for (i = 0; i < curr_rx->len-2; i++)
 					printf("%c", curr_rx->rx[i]);
@@ -366,6 +382,7 @@ static int hmlan_parse_in(int fd, void *data)
 				continue;
 
 			if (verbose) {
+				print_timestamp(stdout);
 				printf("LAN > ");
 				for (i = 0; i < last; i++)
 					printf("%c", instart[i]);
@@ -397,7 +414,8 @@ static int hmlan_parse_in(int fd, void *data)
 			hmcfgusb_send(dev, out, sizeof(out), 1);
 		}
 	} else if (r < 0) {
-		perror("read");
+		if (errno != ECONNRESET)
+			perror("read");
 		return r;
 	} else {
 		return 0;
@@ -618,6 +636,7 @@ static int socket_server(char *iface, int port, int flags)
 		client_addr = ntohl(csin.sin_addr.s_addr);
 
 		if (verbose) {
+			print_timestamp(stdout);
 			printf("Client %d.%d.%d.%d connected!\n",
 					(client_addr & 0xff000000) >> 24,
 					(client_addr & 0x00ff0000) >> 16,
@@ -631,6 +650,7 @@ static int socket_server(char *iface, int port, int flags)
 		close(client);
 
 		if (verbose) {
+			print_timestamp(stdout);
 			printf("Connection to %d.%d.%d.%d closed!\n",
 					(client_addr & 0xff000000) >> 24,
 					(client_addr & 0x00ff0000) >> 16,
