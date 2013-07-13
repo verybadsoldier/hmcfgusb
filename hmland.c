@@ -290,7 +290,7 @@ static int hmlan_format_out(uint8_t *buf, int buf_len, void *data)
 		return 0;
 	}
 
-	/* Send al queued packets */
+	/* Send all queued packets */
 	if (wait_for_h) {
 		struct queued_rx *curr_rx = qrx;
 		struct queued_rx *last_rx;
@@ -308,7 +308,6 @@ static int hmlan_format_out(uint8_t *buf, int buf_len, void *data)
 			w = write(fd, curr_rx->rx, curr_rx->len);
 			if (w <= 0) {
 				perror("write");
-				return 0;
 			}
 			last_rx = curr_rx;
 			curr_rx = curr_rx->next;
