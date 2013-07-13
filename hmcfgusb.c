@@ -242,7 +242,7 @@ static void LIBUSB_CALL hmcfgusb_interrupt(struct libusb_transfer *transfer)
 
 	if (transfer->status != LIBUSB_TRANSFER_COMPLETED) {
 		if (transfer->status != LIBUSB_TRANSFER_TIMED_OUT) {
-			fprintf(stderr, "Interrupt transfer not completed: %d!\n", transfer->status);
+			fprintf(stderr, "Interrupt transfer not completed: %s!\n", usb_strerror(transfer->status));
 			quit = EIO;
 
 			if (cb_data && cb_data->dev && cb_data->dev->transfer) {
