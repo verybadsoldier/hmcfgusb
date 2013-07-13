@@ -49,6 +49,15 @@ static int impersonate_hmlanif = 0;
 static int debug = 0;
 static int verbose = 0;
 
+struct queued_rx {
+	char *rx;
+	int len;
+	struct queued_rx *next;
+};
+
+static struct queued_rx *qrx = NULL;
+static int wait_for_h = 0;
+
 #define	FLAG_LENGTH_BYTE	(1<<0)
 #define	FLAG_FORMAT_HEX		(1<<1)
 #define	FLAG_COMMA_BEFORE	(1<<2)
@@ -239,6 +248,33 @@ static int hmlan_format_out(uint8_t *buf, int buf_len, void *data)
 			hexdump(buf, buf_len, "Unknown> ");
 			break;
 	}
+
+	/* Queue packet until first respone to 'K' is received */
+	if (wait_for_h && buf[0] != 'H') {
+		struct queued_rx **rxp = &qrx;
+
+		while (*rxp)
+			rxp = &((*rxp)->next);
+
+		*rxp = malloc(sizeof(struct queued_rx));
+		if (!*rxp) {
+			perror("malloc");
+			return 0;
+		}
+
+		memset(*rxp, 0, sizeof(struct queued_rx));
+		(*rxp)->len = outpos-out;
+		(*rxp)->rx = malloc((*rxp)->len);
+		if (!(*rxp)->rx) {
+			perror("malloc");
+			return 0;
+		}
+		memset((*rxp)->rx, 0, (*rxp)->len);
+		memcpy((*rxp)->rx, out, (*rxp)->len);
+
+		return 1;
+	}
+
 	if (verbose) {
 		int i;
 
@@ -252,6 +288,38 @@ static int hmlan_format_out(uint8_t *buf, int buf_len, void *data)
 	if (w <= 0) {
 		perror("write");
 		return 0;
+	}
+
+	/* Send al queued packets */
+	if (wait_for_h) {
+		struct queued_rx *curr_rx = qrx;
+		struct queued_rx *last_rx;
+
+		while (curr_rx) {
+			if (verbose) {
+				int i;
+
+				printf("LAN < ");
+				for (i = 0; i < curr_rx->len-2; i++)
+					printf("%c", curr_rx->rx[i]);
+				printf("\n");
+			}
+
+			w = write(fd, curr_rx->rx, curr_rx->len);
+			if (w <= 0) {
+				perror("write");
+				return 0;
+			}
+			last_rx = curr_rx;
+			curr_rx = curr_rx->next;
+
+			free(last_rx->rx);
+			free(last_rx);
+		}
+
+		qrx = NULL;
+
+		wait_for_h = 0;
 	}
 
 	return 1;
@@ -369,6 +437,7 @@ static int comm(int fd_in, int fd_out, int master_socket, int flags)
 
 	memset(out, 0, sizeof(out));
 	out[0] = 'K';
+	wait_for_h = 1;
 	hmcfgusb_send_null_frame(dev);
 	hmcfgusb_send(dev, out, sizeof(out), 1);
 
