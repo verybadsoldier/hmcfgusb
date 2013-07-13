@@ -188,7 +188,7 @@ int main(int argc, char **argv)
 		}
 		printf("HM-CFG-USB opened!\n");
 
-		hmcfgusb_send_null_frame(dev);
+		hmcfgusb_send_null_frame(dev, 1);
 		hmcfgusb_send(dev, (unsigned char*)"K", 1, 1);
 
 		while(!quit) {
@@ -210,7 +210,7 @@ int main(int argc, char **argv)
 					break;
 				} else {
 					/* periodically wakeup the device */
-					hmcfgusb_send_null_frame(dev);
+					hmcfgusb_send_null_frame(dev, 1);
 				}
 			}
 		}

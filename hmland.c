@@ -455,7 +455,7 @@ static int comm(int fd_in, int fd_out, int master_socket, int flags)
 	memset(out, 0, sizeof(out));
 	out[0] = 'K';
 	wait_for_h = 1;
-	hmcfgusb_send_null_frame(dev);
+	hmcfgusb_send_null_frame(dev, 1);
 	hmcfgusb_send(dev, out, sizeof(out), 1);
 
 	while(!quit) {
@@ -482,7 +482,7 @@ static int comm(int fd_in, int fd_out, int master_socket, int flags)
 				quit = 1;
 			} else {
 				/* periodically wakeup the device */
-				hmcfgusb_send_null_frame(dev);
+				hmcfgusb_send_null_frame(dev, 1);
 			}
 		}
 	}
