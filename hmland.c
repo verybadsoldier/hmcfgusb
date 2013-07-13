@@ -243,8 +243,9 @@ static int hmlan_format_out(uint8_t *buf, int buf_len, void *data)
 		int i;
 
 		printf("LAN < ");
-		for (i = 0; i < outpos-out; i++)
+		for (i = 0; i < outpos-out-2; i++)
 			printf("%c", out[i]);
+		printf("\n");
 	}
 
 	w = write(fd, out, outpos-out);
