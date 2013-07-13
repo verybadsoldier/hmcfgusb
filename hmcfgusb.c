@@ -393,6 +393,7 @@ int hmcfgusb_poll(struct hmcfgusb_dev *dev, int timeout)
 {
 	struct timeval tv;
 	int usb_event = 0;
+	int timed_out = 0;
 	int i;
 	int n;
 	int fd_n;
@@ -430,6 +431,7 @@ int hmcfgusb_poll(struct hmcfgusb_dev *dev, int timeout)
 			return -1;
 		} else if (n == 0) {
 			usb_event = 1;
+			timed_out = 1;
 		} else {
 			for (fd_n = 0; fd_n < dev->n_pfd; fd_n++) {
 				if (dev->pfd[fd_n].revents) {
@@ -460,6 +462,9 @@ int hmcfgusb_poll(struct hmcfgusb_dev *dev, int timeout)
 		fprintf(stderr, "closing device-connection due to error %d\n", quit);
 		errno = quit;
 	}
+
+	if (timed_out)
+		errno = ETIMEDOUT;
 
 	return -1;
 }

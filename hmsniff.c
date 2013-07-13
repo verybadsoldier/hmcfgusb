@@ -206,11 +206,13 @@ int main(int argc, char **argv)
 				continue;
 			} else if (fd == -1) {
 				if (errno) {
-					perror("hmcfgusb_poll");
-					break;
-				} else {
-					/* periodically wakeup the device */
-					hmcfgusb_send_null_frame(dev, 1);
+					if (errno != ETIMEDOUT) {
+						perror("hmcfgusb_poll");
+						break;
+					} else {
+						/* periodically wakeup the device */
+						hmcfgusb_send_null_frame(dev, 1);
+					}
 				}
 			}
 		}

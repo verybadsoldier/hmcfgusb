@@ -478,11 +478,18 @@ static int comm(int fd_in, int fd_out, int master_socket, int flags)
 			}
 		} else if (fd == -1) {
 			if (errno) {
-				perror("hmcfgusb_poll");
-				quit = 1;
-			} else {
-				/* periodically wakeup the device */
-				hmcfgusb_send_null_frame(dev, 1);
+				if (errno != ETIMEDOUT) {
+					perror("hmcfgusb_poll");
+					quit = 1;
+				} else {
+					/* periodically wakeup the device */
+					hmcfgusb_send_null_frame(dev, 1);
+					if (wait_for_h) {
+						memset(out, 0, sizeof(out));
+						out[0] = 'K';
+						hmcfgusb_send(dev, out, sizeof(out), 1);
+					}
+				}
 			}
 		}
 	}
