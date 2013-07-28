@@ -610,7 +610,7 @@ static int socket_server(char *iface, int port, int flags)
 		sin.sin_addr.s_addr = htonl(INADDR_ANY);
 	} else {
 		if (inet_pton(AF_INET, iface, &(sin.sin_addr.s_addr)) != 1) {
-			perror("inet_ntop");
+			fprintf(stderr, "Can't convert IP %s, aborting!\n", iface);
 			return EXIT_FAILURE;
 		}
 	}
