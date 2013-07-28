@@ -32,6 +32,12 @@
 #include <sys/time.h>
 #include <libusb-1.0/libusb.h>
 
+/* Workaround for old libusb-1.0 */
+#ifndef LIBUSB_CALL
+#define LIBUSB_CALL
+#define libusb_handle_events_timeout_completed(ctx, tv, x) libusb_handle_events_timeout(ctx, tv)
+#endif
+
 #include "hexdump.h"
 #include "hmcfgusb.h"
 
