@@ -442,10 +442,11 @@ static int comm(int fd_in, int fd_out, int master_socket, int flags)
 	}
 
 	if (dev->bootloader) {
-		fprintf(stderr, "HM-CFG-USB in bootloader mode, restarting in normal mode...\n");
-		memset(out, 0, sizeof(out));
-		out[0] = 'K';
-		hmcfgusb_send(dev, out, sizeof(out), 1);
+		if (verbose)
+			fprintf(stderr, "HM-CFG-USB in bootloader mode, restarting in normal mode...\n");
+
+		hmcfgusb_leave_bootloader(dev);
+
 		hmcfgusb_close(dev);
 		sleep(1);
 		return 0;
@@ -709,7 +710,7 @@ void hmlan_syntax(char *prog)
 	fprintf(stderr, "\t-i\tinteractive mode (connect HM-CFG-USB to terminal)\n");
 	fprintf(stderr, "\t-l ip\tlisten on given IP address only (for example 127.0.0.1)\n");
 	fprintf(stderr, "\t-P\tcreate PID file " PID_FILE " in daemon mode\n");
-	fprintf(stderr, "\t-p n\tlisten on port n (default 1000)\n");
+	fprintf(stderr, "\t-p n\tlisten on port n (default: 1000)\n");
 	fprintf(stderr, "\t-r n\treboot HM-CFG-USB after n seconds (0: no reboot, default: %u)\n", DEFAULT_REBOOT_SECONDS);
 	fprintf(stderr, "\t-v\tverbose mode\n");
 

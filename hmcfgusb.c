@@ -497,6 +497,22 @@ void hmcfgusb_enter_bootloader(struct hmcfgusb_dev *dev)
 	return;
 }
 
+void hmcfgusb_leave_bootloader(struct hmcfgusb_dev *dev)
+{
+	uint8_t out[ASYNC_SIZE];
+
+	if (!dev->bootloader) {
+		fprintf(stderr, "request for leaving bootloader mode, but device already in normal mode!\n");
+		return;
+	}
+
+	memset(out, 0, sizeof(out));
+	out[0] = 'K';
+	hmcfgusb_send(dev, out, sizeof(out), 1);
+
+	return;
+}
+
 void hmcfgusb_close(struct hmcfgusb_dev *dev)
 {
 	int err;
