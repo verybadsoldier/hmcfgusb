@@ -44,11 +44,14 @@
 
 #define PID_FILE "/var/run/hmland.pid"
 
+#define DEFAULT_REBOOT_SECONDS	86400
+
 extern char *optarg;
 
 static int impersonate_hmlanif = 0;
 static int debug = 0;
 static int verbose = 0;
+static int reboot_seconds = 0;
 
 struct queued_rx {
 	char *rx;
@@ -438,6 +441,16 @@ static int comm(int fd_in, int fd_out, int master_socket, int flags)
 		return 0;
 	}
 
+	if (dev->bootloader) {
+		fprintf(stderr, "HM-CFG-USB in bootloader mode, restarting in normal mode...\n");
+		memset(out, 0, sizeof(out));
+		out[0] = 'K';
+		hmcfgusb_send(dev, out, sizeof(out), 1);
+		hmcfgusb_close(dev);
+		sleep(1);
+		return 0;
+	}
+
 	if (!hmcfgusb_add_pfd(dev, fd_in, POLLIN)) {
 		fprintf(stderr, "Can't add client to pollfd!\n");
 		hmcfgusb_close(dev);
@@ -491,6 +504,14 @@ static int comm(int fd_in, int fd_out, int master_socket, int flags)
 					}
 				}
 			}
+		}
+
+		if (reboot_seconds && ((dev->opened_at + reboot_seconds) <= time(NULL))) {
+			if (verbose) {
+				fprintf(stderr, "HM-CFG-USB running since %lu seconds, rebooting now...\n",
+					time(NULL) - dev->opened_at);
+			}
+			hmcfgusb_enter_bootloader(dev);
 		}
 	}
 
@@ -689,6 +710,7 @@ void hmlan_syntax(char *prog)
 	fprintf(stderr, "\t-l ip\tlisten on given IP address only (for example 127.0.0.1)\n");
 	fprintf(stderr, "\t-P\tcreate PID file " PID_FILE " in daemon mode\n");
 	fprintf(stderr, "\t-p n\tlisten on port n (default 1000)\n");
+	fprintf(stderr, "\t-r n\treboot HM-CFG-USB after n seconds (0: no reboot, default: %u)\n", DEFAULT_REBOOT_SECONDS);
 	fprintf(stderr, "\t-v\tverbose mode\n");
 
 }
@@ -701,8 +723,10 @@ int main(int argc, char **argv)
 	int flags = 0;
 	char *ep;
 	int opt;
+	
+	reboot_seconds = DEFAULT_REBOOT_SECONDS;
 
-	while((opt = getopt(argc, argv, "DdhiPp:Rl:v")) != -1) {
+	while((opt = getopt(argc, argv, "DdhiPp:Rr:l:v")) != -1) {
 		switch (opt) {
 			case 'D':
 				debug = 1;
@@ -726,6 +750,13 @@ int main(int argc, char **argv)
 				break;
 			case 'R':
 				fprintf(stderr, "-R is no longer needed (1s wakeup is default)\n");
+				break;
+			case 'r':
+				reboot_seconds = strtoul(optarg, &ep, 10);
+				if (*ep != '\0') {
+					fprintf(stderr, "Can't parse reboot-timeout!\n");
+					exit(EXIT_FAILURE);
+				}
 				break;
 			case 'l':
 				iface = optarg;

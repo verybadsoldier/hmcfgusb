@@ -98,7 +98,7 @@ static char * usb_strerror(int e)
 	return unknerr;
 }
 
-static libusb_device_handle *hmcfgusb_find() {
+static libusb_device_handle *hmcfgusb_find(int vid, int pid) {
 	libusb_device_handle *devh = NULL;
 	libusb_device **list;
 	ssize_t cnt;
@@ -118,8 +118,7 @@ static libusb_device_handle *hmcfgusb_find() {
 		if (err)
 			continue;
 
-		if ((desc.idVendor == ID_VENDOR) &&
-		    ((desc.idProduct == ID_PRODUCT) || (desc.idProduct == ID_PRODUCT_BL))) {
+		if ((desc.idVendor == vid) && (desc.idProduct == pid)) {
 			libusb_device *dev = list[i];
 
 			err = libusb_open(dev, &devh);
@@ -297,6 +296,7 @@ struct hmcfgusb_dev *hmcfgusb_init(hmcfgusb_cb_fn cb, void *data)
 	const struct libusb_pollfd **usb_pfd = NULL;
 	struct hmcfgusb_dev *dev = NULL;
 	struct hmcfgusb_cb_data *cb_data = NULL;
+	int bootloader = 0;
 	int err;
 	int i;
 
@@ -306,10 +306,14 @@ struct hmcfgusb_dev *hmcfgusb_init(hmcfgusb_cb_fn cb, void *data)
 		return NULL;
 	}
 
-	devh = hmcfgusb_find();
+	devh = hmcfgusb_find(ID_VENDOR, ID_PRODUCT);
 	if (!devh) {
-		fprintf(stderr, "Can't find/open hmcfgusb!\n");
-		return NULL;
+		devh = hmcfgusb_find(ID_VENDOR, ID_PRODUCT_BL);
+		if (!devh) {
+			fprintf(stderr, "Can't find/open hmcfgusb!\n");
+			return NULL;
+		}
+		bootloader = 1;
 	}
 
 	dev = malloc(sizeof(struct hmcfgusb_dev));
@@ -320,6 +324,8 @@ struct hmcfgusb_dev *hmcfgusb_init(hmcfgusb_cb_fn cb, void *data)
 
 	memset(dev, 0, sizeof(struct hmcfgusb_dev));
 	dev->usb_devh = devh;
+	dev->bootloader = bootloader;
+	dev->opened_at = time(NULL);
 
 	cb_data = malloc(sizeof(struct hmcfgusb_cb_data));
 	if (!cb_data) {
@@ -473,6 +479,22 @@ int hmcfgusb_poll(struct hmcfgusb_dev *dev, int timeout)
 		errno = ETIMEDOUT;
 
 	return -1;
+}
+
+void hmcfgusb_enter_bootloader(struct hmcfgusb_dev *dev)
+{
+	uint8_t out[ASYNC_SIZE];
+
+	if (dev->bootloader) {
+		fprintf(stderr, "request for bootloader mode, but device already in bootloader!\n");
+		return;
+	}
+
+	memset(out, 0, sizeof(out));
+	out[0] = 'B';
+	hmcfgusb_send(dev, out, sizeof(out), 1);
+
+	return;
 }
 
 void hmcfgusb_close(struct hmcfgusb_dev *dev)
