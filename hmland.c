@@ -52,6 +52,8 @@ static int impersonate_hmlanif = 0;
 static int debug = 0;
 static int verbose = 0;
 static int reboot_seconds = 0;
+static int reboot_at_hour = -1;
+static int reboot_at_minute = -1;
 
 struct queued_rx {
 	char *rx;
@@ -443,7 +445,7 @@ static int comm(int fd_in, int fd_out, int master_socket, int flags)
 
 	if (dev->bootloader) {
 		if (verbose)
-			fprintf(stderr, "HM-CFG-USB in bootloader mode, restarting in normal mode...\n");
+			printf("HM-CFG-USB in bootloader mode, restarting in normal mode...\n");
 
 		hmcfgusb_leave_bootloader(dev);
 
@@ -451,6 +453,42 @@ static int comm(int fd_in, int fd_out, int master_socket, int flags)
 		sleep(1);
 		return 0;
 	}
+
+	if ((reboot_at_hour != -1) && (reboot_at_minute != -1)) {
+		struct tm *tm_s;
+		time_t tm;
+
+		tm = time(NULL);
+		tm_s = localtime(&tm);
+		if (tm_s == NULL) {
+			perror("localtime");
+			return 0;
+		}
+
+		if ((tm_s->tm_hour > reboot_at_hour) ||
+		    ((tm_s->tm_hour == reboot_at_hour) && (tm_s->tm_min >= reboot_at_minute))) {
+			if (verbose)
+				printf("Rebooting tomorrow at %02u:%02u\n", reboot_at_hour, reboot_at_minute);
+
+			tm = 86400;
+		} else {
+			if (verbose)
+				printf("Rebooting today at %02u:%02u\n", reboot_at_hour, reboot_at_minute);
+
+			tm = 0;
+		}
+
+		tm_s->tm_hour = reboot_at_hour;
+		tm_s->tm_min = reboot_at_minute;
+		tm_s->tm_sec = 0;
+
+		tm += mktime(tm_s);
+		reboot_seconds = tm - dev->opened_at;
+	}
+
+	if (verbose && reboot_seconds)
+		printf("Rebooting in %u seconds\n", reboot_seconds);
+
 
 	if (!hmcfgusb_add_pfd(dev, fd_in, POLLIN)) {
 		fprintf(stderr, "Can't add client to pollfd!\n");
@@ -509,7 +547,7 @@ static int comm(int fd_in, int fd_out, int master_socket, int flags)
 
 		if (reboot_seconds && ((dev->opened_at + reboot_seconds) <= time(NULL))) {
 			if (verbose) {
-				fprintf(stderr, "HM-CFG-USB running since %lu seconds, rebooting now...\n",
+				printf("HM-CFG-USB running since %lu seconds, rebooting now...\n",
 					time(NULL) - dev->opened_at);
 			}
 			hmcfgusb_enter_bootloader(dev);
@@ -704,15 +742,16 @@ void hmlan_syntax(char *prog)
 {
 	fprintf(stderr, "Syntax: %s options\n\n", prog);
 	fprintf(stderr, "Possible options:\n");
-	fprintf(stderr, "\t-D\tdebug mode\n");
-	fprintf(stderr, "\t-d\tdaemon mode\n");
-	fprintf(stderr, "\t-h\tthis help\n");
-	fprintf(stderr, "\t-i\tinteractive mode (connect HM-CFG-USB to terminal)\n");
-	fprintf(stderr, "\t-l ip\tlisten on given IP address only (for example 127.0.0.1)\n");
-	fprintf(stderr, "\t-P\tcreate PID file " PID_FILE " in daemon mode\n");
-	fprintf(stderr, "\t-p n\tlisten on port n (default: 1000)\n");
-	fprintf(stderr, "\t-r n\treboot HM-CFG-USB after n seconds (0: no reboot, default: %u)\n", DEFAULT_REBOOT_SECONDS);
-	fprintf(stderr, "\t-v\tverbose mode\n");
+	fprintf(stderr, "\t-D\t\tdebug mode\n");
+	fprintf(stderr, "\t-d\t\tdaemon mode\n");
+	fprintf(stderr, "\t-h\t\tthis help\n");
+	fprintf(stderr, "\t-i\t\tinteractive mode (connect HM-CFG-USB to terminal)\n");
+	fprintf(stderr, "\t-l ip\t\tlisten on given IP address only (for example 127.0.0.1)\n");
+	fprintf(stderr, "\t-P\t\tcreate PID file " PID_FILE " in daemon mode\n");
+	fprintf(stderr, "\t-p n\t\tlisten on port n (default: 1000)\n");
+	fprintf(stderr, "\t-r n\t\treboot HM-CFG-USB after n seconds (0: no reboot, default: %u)\n", DEFAULT_REBOOT_SECONDS);
+	fprintf(stderr, "\t   hh:mm\treboot HM-CFG-USB daily at hh:mm\n");
+	fprintf(stderr, "\t-v\t\tverbose mode\n");
 
 }
 
@@ -755,8 +794,20 @@ int main(int argc, char **argv)
 			case 'r':
 				reboot_seconds = strtoul(optarg, &ep, 10);
 				if (*ep != '\0') {
-					fprintf(stderr, "Can't parse reboot-timeout!\n");
-					exit(EXIT_FAILURE);
+					if (*ep == ':') {
+						reboot_at_hour = reboot_seconds;
+						ep++;
+						reboot_at_minute = strtoul(ep, &ep, 10);
+						if (*ep != '\0') {
+							fprintf(stderr, "Can't parse reboot-time!\n");
+							exit(EXIT_FAILURE);
+						}
+
+						reboot_seconds = 0;
+					} else {
+						fprintf(stderr, "Can't parse reboot-timeout!\n");
+						exit(EXIT_FAILURE);
+					}
 				}
 				break;
 			case 'l':
