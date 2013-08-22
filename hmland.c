@@ -465,25 +465,15 @@ static int comm(int fd_in, int fd_out, int master_socket, int flags)
 			return 0;
 		}
 
-		if ((tm_s->tm_hour > reboot_at_hour) ||
-		    ((tm_s->tm_hour == reboot_at_hour) && (tm_s->tm_min >= reboot_at_minute))) {
-			if (verbose)
-				printf("Rebooting tomorrow at %02u:%02u\n", reboot_at_hour, reboot_at_minute);
-
-			tm = 86400;
-		} else {
-			if (verbose)
-				printf("Rebooting today at %02u:%02u\n", reboot_at_hour, reboot_at_minute);
-
-			tm = 0;
-		}
-
 		tm_s->tm_hour = reboot_at_hour;
 		tm_s->tm_min = reboot_at_minute;
 		tm_s->tm_sec = 0;
 
-		tm += mktime(tm_s);
+		tm = mktime(tm_s);
 		reboot_seconds = tm - dev->opened_at;
+
+		while (reboot_seconds <= 0)
+			reboot_seconds += 86400;
 	}
 
 	if (verbose && reboot_seconds)
