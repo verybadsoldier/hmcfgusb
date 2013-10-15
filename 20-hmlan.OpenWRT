@@ -1,6 +1,6 @@
 #!/bin/sh
 
-if [ "${PRODUCT:0:9}" = "1b1f/c00f" ]; then
+if [ "${PRODUCT:0:9}" = "1b1f/c00f" -o "${PRODUCT:0:9}" = "1b1f/c010" ]; then
 	logger "HMLAN: ${ACTION} ${PRODUCT}"
 
 	case "$ACTION" in
