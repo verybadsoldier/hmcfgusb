@@ -39,6 +39,7 @@
 #include <arpa/inet.h>
 #include <libusb-1.0/libusb.h>
 
+#include "version.h"
 #include "hexdump.h"
 #include "hmcfgusb.h"
 
@@ -742,6 +743,7 @@ void hmlan_syntax(char *prog)
 	fprintf(stderr, "\t-r n\t\treboot HM-CFG-USB after n seconds (0: no reboot, default: %u)\n", DEFAULT_REBOOT_SECONDS);
 	fprintf(stderr, "\t   hh:mm\treboot HM-CFG-USB daily at hh:mm\n");
 	fprintf(stderr, "\t-v\t\tverbose mode\n");
+	fprintf(stderr, "\t-V\t\tshow version (" VERSION ")\n");
 
 }
 
@@ -756,7 +758,7 @@ int main(int argc, char **argv)
 	
 	reboot_seconds = DEFAULT_REBOOT_SECONDS;
 
-	while((opt = getopt(argc, argv, "DdhiPp:Rr:l:v")) != -1) {
+	while((opt = getopt(argc, argv, "DdhiPp:Rr:l:vV")) != -1) {
 		switch (opt) {
 			case 'D':
 				debug = 1;
@@ -806,6 +808,10 @@ int main(int argc, char **argv)
 			case 'v':
 				verbose = 1;
 				break;
+			case 'V':
+				printf("hmland " VERSION "\n");
+				printf("Copyright (c) 2013 Michael Gernoth\n\n");
+				exit(EXIT_SUCCESS);
 			case 'h':
 			case ':':
 			case '?':

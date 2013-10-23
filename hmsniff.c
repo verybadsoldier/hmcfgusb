@@ -32,6 +32,7 @@
 #include <sys/time.h>
 #include <libusb-1.0/libusb.h>
 
+#include "version.h"
 #include "hexdump.h"
 #include "hmcfgusb.h"
 
