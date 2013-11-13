@@ -311,6 +311,7 @@ struct hmcfgusb_dev *hmcfgusb_init(hmcfgusb_cb_fn cb, void *data)
 		devh = hmcfgusb_find(ID_VENDOR, ID_PRODUCT_BL);
 		if (!devh) {
 			fprintf(stderr, "Can't find/open hmcfgusb!\n");
+			libusb_exit(NULL);
 			return NULL;
 		}
 		bootloader = 1;
@@ -319,6 +320,8 @@ struct hmcfgusb_dev *hmcfgusb_init(hmcfgusb_cb_fn cb, void *data)
 	dev = malloc(sizeof(struct hmcfgusb_dev));
 	if (!dev) {
 		perror("Can't allocate memory for hmcfgusb_dev");
+		libusb_close(devh);
+		libusb_exit(NULL);
 		return NULL;
 	}
 
@@ -331,6 +334,8 @@ struct hmcfgusb_dev *hmcfgusb_init(hmcfgusb_cb_fn cb, void *data)
 	if (!cb_data) {
 		perror("Can't allocate memory for hmcfgusb_cb_data");
 		free(dev);
+		libusb_close(devh);
+		libusb_exit(NULL);
 		return NULL;
 	}
 
@@ -345,6 +350,8 @@ struct hmcfgusb_dev *hmcfgusb_init(hmcfgusb_cb_fn cb, void *data)
 		fprintf(stderr, "Can't prepare async device io!\n");
 		free(dev);
 		free(cb_data);
+		libusb_close(devh);
+		libusb_exit(NULL);
 		return NULL;
 	}
 
@@ -353,6 +360,8 @@ struct hmcfgusb_dev *hmcfgusb_init(hmcfgusb_cb_fn cb, void *data)
 		fprintf(stderr, "Can't get FDset from libusb!\n");
 		free(dev);
 		free(cb_data);
+		libusb_close(devh);
+		libusb_exit(NULL);
 		return NULL;
 	}
 
@@ -365,6 +374,8 @@ struct hmcfgusb_dev *hmcfgusb_init(hmcfgusb_cb_fn cb, void *data)
 		perror("Can't allocate memory for poll-fds");
 		free(dev);
 		free(cb_data);
+		libusb_close(devh);
+		libusb_exit(NULL);
 		return NULL;
 	}
 
