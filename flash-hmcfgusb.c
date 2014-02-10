@@ -39,23 +39,17 @@
 #include "hmcfgusb.h"
 
 struct recv_data {
+	int ack;
 };
 
 static int parse_hmcfgusb(uint8_t *buf, int buf_len, void *data)
 {
-	if (buf_len < 1)
+	struct recv_data *rdata = data;
+
+	if (buf_len != 1)
 		return 1;
 
-	switch(buf[0]) {
-		case 'E':
-		case 'H':
-		case 'R':
-		case 'I':
-			break;
-		default:
-			hexdump(buf, buf_len, "Unknown> ");
-			break;
-	}
+	rdata->ack = buf[0];
 
 	return 1;
 }
@@ -83,27 +77,45 @@ int main(int argc, char **argv)
 	uint8_t buf[4096];
 	uint8_t *outp;
 	int fd;
+	int pfd;
 	int r;
 	int i;
 	int cnt;
 	int pkt;
+	int debug = 0;
 
-	hmcfgusb_set_debug(0);
+	hmcfgusb_set_debug(debug);
 
 	memset(&rdata, 0, sizeof(rdata));
-
-	dev = hmcfgusb_init(parse_hmcfgusb, &rdata);
-	if (!dev) {
-		fprintf(stderr, "Can't initialize HM-CFG-USB\n");
-		exit(EXIT_FAILURE);
-	}
-	printf("HM-CFG-USB opened!\n");
 
 	fd = open("hmusbif.enc", O_RDONLY);
 	if (fd < 0) {
 		perror("Can't open hmusbif.enc");
 		exit(EXIT_FAILURE);
 	}
+
+	dev = hmcfgusb_init(parse_hmcfgusb, &rdata);
+	if (!dev) {
+		fprintf(stderr, "Can't initialize HM-CFG-USB\n");
+		exit(EXIT_FAILURE);
+	}
+
+	if (!dev->bootloader) {
+		fprintf(stderr, "HM-CFG-USB not in bootloader mode, entering bootloader.\n");
+		hmcfgusb_enter_bootloader(dev);
+		fprintf(stderr, "\nWaiting for device to reappear...\n");
+
+		do {
+			sleep(1);
+		} while ((dev = hmcfgusb_init(parse_hmcfgusb, &rdata)) == NULL);
+
+		if (!dev->bootloader) {
+			fprintf(stderr, "Can't enter bootloader, giving up!\n");
+			exit(EXIT_FAILURE);
+		}
+	}
+
+	printf("HM-CFG-USB opened!\n");
 
 	cnt = 0;
 	pkt = 0;
@@ -128,8 +140,6 @@ int main(int argc, char **argv)
 		len |= (ascii_to_nibble(buf[2]) & 0xf)<< 4;
 		len |= ascii_to_nibble(buf[3]) & 0xf;
 
-		printf("packet length: %x\n", len);
-
 		r = read(fd, buf, len * 2);
 		if (r < 0) {
 			perror("read");
@@ -141,7 +151,6 @@ int main(int argc, char **argv)
 
 		memset(out, 0, sizeof(out));
 		outp = out;
-		*outp++ = 'W';
 		*outp++ = (pkt >> 8) & 0xff;
 		*outp++ = pkt & 0xff;
 		*outp++ = (len >> 8) & 0xff;
@@ -151,10 +160,34 @@ int main(int argc, char **argv)
 			*outp |= ascii_to_nibble(buf[i+1]) & 0xf;
 			outp++;
 		}
-		cnt += r/2;
+		cnt = outp - out;
 		printf("Flashing %d bytes...\n", cnt);
-		hexdump(out, outp-out, "F> ");
-		//hmcfgusb_send(dev, out, r/2, 1);
+		if (debug)
+			hexdump(out, cnt, "F> ");
+
+		rdata.ack = 0;
+		if (!hmcfgusb_send(dev, out, cnt, 0)) {
+			perror("hmcfgusb_send");
+			exit(EXIT_FAILURE);
+		}
+
+		printf("Waiting for ack...\n");
+		do {
+			errno = 0;
+			pfd = hmcfgusb_poll(dev, 1);
+			if ((pfd < 0) && errno) {
+				perror("hmcfgusb_poll");
+				exit(EXIT_FAILURE);
+			}
+			if (rdata.ack) {
+				break;
+			}
+		} while (pfd < 0);
+
+		if (rdata.ack == 2) {
+			printf("Firmware update successfull!\n");
+			break;
+		}
 		pkt++;
 	} while (r > 0);
 

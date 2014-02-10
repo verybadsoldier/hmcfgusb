@@ -201,13 +201,13 @@ int hmcfgusb_send(struct hmcfgusb_dev *usbdev, unsigned char* send_data, int len
 	return 1;
 }
 
-static struct libusb_transfer *hmcfgusb_prepare_int(libusb_device_handle *devh, libusb_transfer_cb_fn cb, void *data)
+static struct libusb_transfer *hmcfgusb_prepare_int(libusb_device_handle *devh, libusb_transfer_cb_fn cb, void *data, int in_size)
 {
 	unsigned char *data_buf;
 	struct libusb_transfer *transfer;
 	int err;
 
-	data_buf = malloc(ASYNC_SIZE);
+	data_buf = malloc(in_size);
 	if (!data_buf) {
 		fprintf(stderr, "Can't allocate memory for data-buffer!\n");
 		return NULL;
@@ -221,7 +221,7 @@ static struct libusb_transfer *hmcfgusb_prepare_int(libusb_device_handle *devh, 
 	}
 
 	libusb_fill_interrupt_transfer(transfer, devh, EP_IN,
-			data_buf, ASYNC_SIZE, cb, data, USB_TIMEOUT);
+			data_buf, in_size, cb, data, USB_TIMEOUT);
 
 	transfer->flags = LIBUSB_TRANSFER_SHORT_NOT_OK | LIBUSB_TRANSFER_FREE_BUFFER;
 
@@ -345,7 +345,12 @@ struct hmcfgusb_dev *hmcfgusb_init(hmcfgusb_cb_fn cb, void *data)
 	cb_data->cb = cb;
 	cb_data->data = data;
 
-	dev->transfer = hmcfgusb_prepare_int(devh, hmcfgusb_interrupt, cb_data);
+	/* Bootloader can only say ack/nack/done */
+	if (dev->bootloader)
+		dev->transfer = hmcfgusb_prepare_int(devh, hmcfgusb_interrupt, cb_data, 1);
+	else
+		dev->transfer = hmcfgusb_prepare_int(devh, hmcfgusb_interrupt, cb_data, ASYNC_SIZE);
+
 	if (!dev->transfer) {
 		fprintf(stderr, "Can't prepare async device io!\n");
 		free(dev);

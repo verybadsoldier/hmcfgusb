@@ -9,7 +9,7 @@ FLASH_HMCFGUSB_OBJS=hmcfgusb.o flash-hmcfgusb.o
 
 OBJS=$(HMLAN_OBJS) $(HMSNIFF_OBJS) $(FLASH_HMCFGUSB_OBJS)
 
-all: hmland hmsniff
+all: hmland hmsniff flash-hmcfgusb
 
 DEPEND=$(OBJS:.o=.d)
 -include $(DEPEND)
