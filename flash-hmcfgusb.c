@@ -231,7 +231,7 @@ int main(int argc, char **argv)
 	printf("\nHM-CFG-USB opened.\n\n");
 
 
-	printf("Flasing %d blocks", fw_blocks);
+	printf("Flashing %d blocks", fw_blocks);
 	if (debug) {
 		printf("\n");
 	} else {
