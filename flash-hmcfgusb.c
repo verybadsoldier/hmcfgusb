@@ -1,4 +1,4 @@
-/* (not working) flasher for HM-CFG-USB
+/* flasher for HM-CFG-USB
  *
  * Copyright (c) 2013 Michael Gernoth <michael@gernoth.net>
  *
@@ -36,7 +36,11 @@
 #include <libusb-1.0/libusb.h>
 
 #include "hexdump.h"
+#include "version.h"
 #include "hmcfgusb.h"
+
+/* This might be wrong, but it works for current fw */
+#define MAX_BLOCK_LENGTH	512
 
 struct recv_data {
 	int ack;
@@ -69,30 +73,139 @@ static uint8_t ascii_to_nibble(uint8_t a)
 	return c;
 }
 
+static int validate_nibble(uint8_t a)
+{
+	if (((a >= '0') && (a <= '9')) ||
+	    ((a >= 'A') && (a <= 'F')) ||
+	    ((a >= 'a') && (a <= 'f')))
+	    	return 1;
+
+	return 0;
+}
+
 int main(int argc, char **argv)
 {
+	const char twiddlie[] = { '-', '\\', '|', '/' };
 	struct hmcfgusb_dev *dev;
 	struct recv_data rdata;
-	uint8_t out[4096];
+	struct stat stat_buf;
 	uint8_t buf[4096];
-	uint8_t *outp;
+	uint16_t len;
+	uint8_t **fw = NULL;
+	int fw_blocks = 0;
+	int block;
 	int fd;
 	int pfd;
 	int r;
 	int i;
-	int cnt;
-	int pkt;
 	int debug = 0;
+
+	printf("HM-CFG-USB flasher version " VERSION "\n\n");
+
+	if (argc != 2) {
+		if (argc == 1)
+			fprintf(stderr, "Missing firmware filename!\n\n");
+
+		fprintf(stderr, "Syntax: %s hmusbif.enc\n\n", argv[0]);
+		exit(EXIT_FAILURE);
+	}
+
+	if (stat(argv[1], &stat_buf) == -1) {
+		fprintf(stderr, "Can't stat %s: %s\n", argv[1], strerror(errno));
+		exit(EXIT_FAILURE);
+	}
+
+	fd = open(argv[1], O_RDONLY);
+	if (fd < 0) {
+		fprintf(stderr, "Can't open %s: %s", argv[1], strerror(errno));
+		exit(EXIT_FAILURE);
+	}
+
+	printf("Reading firmware from %s...\n", argv[1]);
+	do {
+		memset(buf, 0, sizeof(buf));
+		r = read(fd, buf, 4);
+		if (r < 0) {
+			perror("read");
+			exit(EXIT_FAILURE);
+		} else if (r == 0) {
+			break;
+		} else if (r != 4) {
+			printf("can't get length information!\n");
+			exit(EXIT_FAILURE);
+		}
+
+		for (i = 0; i < r; i++) {
+			if (!validate_nibble(buf[i])) {
+				fprintf(stderr, "Firmware file not valid!\n");
+				exit(EXIT_FAILURE);
+			}
+		}
+
+		len = (ascii_to_nibble(buf[0]) & 0xf)<< 4;
+		len |= ascii_to_nibble(buf[1]) & 0xf;
+		len <<= 8;
+		len |= (ascii_to_nibble(buf[2]) & 0xf)<< 4;
+		len |= ascii_to_nibble(buf[3]) & 0xf;
+
+		/* This might be wrong, but it works for current fw */
+		if (len > MAX_BLOCK_LENGTH) {
+			fprintf(stderr, "Invalid block-length %u > %u for block %d!\n", len, MAX_BLOCK_LENGTH, fw_blocks+1);
+			exit(EXIT_FAILURE);
+		}
+
+		fw = realloc(fw, sizeof(uint8_t*) * (fw_blocks + 1));
+		if (fw == NULL) {
+			perror("Can't reallocate fw-blocklist");
+			exit(EXIT_FAILURE);
+		}
+
+		fw[fw_blocks] = malloc(len + 4);
+		if (fw[fw_blocks] == NULL) {
+			perror("Can't allocate memory for fw-block");
+			exit(EXIT_FAILURE);
+		}
+
+		fw[fw_blocks][0] = (fw_blocks >> 8) & 0xff;
+		fw[fw_blocks][1] = fw_blocks & 0xff;
+		fw[fw_blocks][2] = (len >> 8) & 0xff;
+		fw[fw_blocks][3] = len & 0xff;
+
+		r = read(fd, buf, len * 2);
+		if (r < 0) {
+			perror("read");
+			exit(EXIT_FAILURE);
+		} else if (r < len * 2) {
+			fprintf(stderr, "short read, aborting (%d < %d)\n", r, len * 2);
+			exit(EXIT_FAILURE);
+		}
+
+		for (i = 0; i < r; i+=2) {
+			if ((!validate_nibble(buf[i])) ||
+			    (!validate_nibble(buf[i+1]))) {
+				fprintf(stderr, "Firmware file not valid!\n");
+				exit(EXIT_FAILURE);
+			}
+
+			fw[fw_blocks][(i/2) + 4] = (ascii_to_nibble(buf[i]) & 0xf)<< 4;
+			fw[fw_blocks][(i/2) + 4] |= ascii_to_nibble(buf[i+1]) & 0xf;
+		}
+
+		fw_blocks++;
+		if (debug)
+			printf("Firmware block %d with length %u read.\n", fw_blocks, len);
+	} while(r > 0);
+
+	if (fw_blocks == 0) {
+		fprintf(stderr, "Firmware file not valid!\n");
+		exit(EXIT_FAILURE);
+	}
+
+	printf("Firmware with %d blocks successfully read.\n", fw_blocks);
 
 	hmcfgusb_set_debug(debug);
 
 	memset(&rdata, 0, sizeof(rdata));
-
-	fd = open("hmusbif.enc", O_RDONLY);
-	if (fd < 0) {
-		perror("Can't open hmusbif.enc");
-		exit(EXIT_FAILURE);
-	}
 
 	dev = hmcfgusb_init(parse_hmcfgusb, &rdata);
 	if (!dev) {
@@ -101,7 +214,7 @@ int main(int argc, char **argv)
 	}
 
 	if (!dev->bootloader) {
-		fprintf(stderr, "HM-CFG-USB not in bootloader mode, entering bootloader.\n");
+		fprintf(stderr, "\nHM-CFG-USB not in bootloader mode, entering bootloader.\n");
 		hmcfgusb_enter_bootloader(dev);
 		fprintf(stderr, "\nWaiting for device to reappear...\n");
 
@@ -115,68 +228,39 @@ int main(int argc, char **argv)
 		}
 	}
 
-	printf("HM-CFG-USB opened!\n");
+	printf("\nHM-CFG-USB opened.\n\n");
 
-	cnt = 0;
-	pkt = 0;
-	do {
-		int len;
 
-		memset(buf, 0, sizeof(buf));
-		r = read(fd, buf, 4);
-		if (r < 0) {
-			perror("read");
-			exit(EXIT_FAILURE);
-		} else if (r == 0) {
-			break;
-		} else if (r != 4) {
-			printf("can't get length information!\n");
-			exit(EXIT_FAILURE);
-		}
+	printf("Flasing %d blocks", fw_blocks);
+	if (debug) {
+		printf("\n");
+	} else {
+		printf(": %c", twiddlie[0]);
+		fflush(stdout);
+	}
 
-		len = (ascii_to_nibble(buf[0]) & 0xf)<< 4;
-		len |= ascii_to_nibble(buf[1]) & 0xf;
-		len <<= 8;
-		len |= (ascii_to_nibble(buf[2]) & 0xf)<< 4;
-		len |= ascii_to_nibble(buf[3]) & 0xf;
+	for (block = 0; block < fw_blocks; block++) {
+		len = fw[block][2] << 8;
+		len |= fw[block][3];
 
-		r = read(fd, buf, len * 2);
-		if (r < 0) {
-			perror("read");
-			exit(EXIT_FAILURE);
-		} else if (r < len * 2) {
-			printf("short read, aborting (%d < %d)\n", r, len * 2);
-			break;
-		}
+		len += 4; /* block nr., length */
 
-		memset(out, 0, sizeof(out));
-		outp = out;
-		*outp++ = (pkt >> 8) & 0xff;
-		*outp++ = pkt & 0xff;
-		*outp++ = (len >> 8) & 0xff;
-		*outp++ = len & 0xff;
-		for (i = 0; i < r; i+=2) {
-			*outp = (ascii_to_nibble(buf[i]) & 0xf)<< 4;
-			*outp |= ascii_to_nibble(buf[i+1]) & 0xf;
-			outp++;
-		}
-		cnt = outp - out;
-		printf("Flashing %d bytes...\n", cnt);
 		if (debug)
-			hexdump(out, cnt, "F> ");
+			hexdump(fw[block], len, "F> ");
 
 		rdata.ack = 0;
-		if (!hmcfgusb_send(dev, out, cnt, 0)) {
-			perror("hmcfgusb_send");
+		if (!hmcfgusb_send(dev, fw[block], len, 0)) {
+			perror("\n\nhmcfgusb_send");
 			exit(EXIT_FAILURE);
 		}
 
-		printf("Waiting for ack...\n");
+		if (debug)
+			printf("Waiting for ack...\n");
 		do {
 			errno = 0;
 			pfd = hmcfgusb_poll(dev, 1);
 			if ((pfd < 0) && errno) {
-				perror("hmcfgusb_poll");
+				perror("\n\nhmcfgusb_poll");
 				exit(EXIT_FAILURE);
 			}
 			if (rdata.ack) {
@@ -185,11 +269,23 @@ int main(int argc, char **argv)
 		} while (pfd < 0);
 
 		if (rdata.ack == 2) {
-			printf("Firmware update successfull!\n");
+			printf("\n\nFirmware update successfull!\n");
 			break;
 		}
-		pkt++;
-	} while (r > 0);
+
+		if (rdata.ack != 1) {
+			fprintf(stderr, "\n\nError flashing block %d, status: %u\n", block, rdata.ack);
+			exit(EXIT_FAILURE);
+		}
+
+		if (!debug) {
+			printf("\b%c", twiddlie[block % sizeof(twiddlie)]);
+			fflush(stdout);
+		}
+		free(fw[block]);
+	}
+
+	free(fw);
 
 	hmcfgusb_close(dev);
 
