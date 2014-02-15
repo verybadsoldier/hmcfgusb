@@ -223,7 +223,7 @@ static struct libusb_transfer *hmcfgusb_prepare_int(libusb_device_handle *devh, 
 	libusb_fill_interrupt_transfer(transfer, devh, EP_IN,
 			data_buf, in_size, cb, data, USB_TIMEOUT);
 
-	transfer->flags = LIBUSB_TRANSFER_SHORT_NOT_OK | LIBUSB_TRANSFER_FREE_BUFFER;
+	transfer->flags = LIBUSB_TRANSFER_FREE_BUFFER;
 
 	err = libusb_submit_transfer(transfer);
 	if (err != 0) {
@@ -345,11 +345,7 @@ struct hmcfgusb_dev *hmcfgusb_init(hmcfgusb_cb_fn cb, void *data)
 	cb_data->cb = cb;
 	cb_data->data = data;
 
-	/* Bootloader can only say ack/nack/done */
-	if (dev->bootloader)
-		dev->transfer = hmcfgusb_prepare_int(devh, hmcfgusb_interrupt, cb_data, 1);
-	else
-		dev->transfer = hmcfgusb_prepare_int(devh, hmcfgusb_interrupt, cb_data, ASYNC_SIZE);
+	dev->transfer = hmcfgusb_prepare_int(devh, hmcfgusb_interrupt, cb_data, ASYNC_SIZE);
 
 	if (!dev->transfer) {
 		fprintf(stderr, "Can't prepare async device io!\n");
