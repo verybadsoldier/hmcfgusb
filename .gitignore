@@ -1,6 +1,8 @@
 flash-hmcfgusb
 flash-hmcfgusb.d
 flash-hmcfgusb.o
+firmware.d
+firmware.o
 hmcfgusb.d
 hmcfgusb.o
 hmland
