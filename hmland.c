@@ -263,6 +263,10 @@ static int hmlan_format_out(uint8_t *buf, int buf_len, void *data)
 			format_part_out(&inpos, (buf_len-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), 1, FLAG_FORMAT_HEX | FLAG_COMMA_BEFORE | FLAG_NL);
 
 			break;
+		case 'G':
+			format_part_out(&inpos, (buf_len-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), 1, FLAG_FORMAT_HEX | FLAG_NL);
+
+			break;
 		default:
 			format_part_out(&inpos, (buf_len-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), buf_len-1, FLAG_FORMAT_HEX | FLAG_NL);
 			hexdump(buf, buf_len, "Unknown> ");
