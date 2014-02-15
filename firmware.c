@@ -119,7 +119,6 @@ struct firmware* firmware_read_firmware(char *filename, int debug)
 		len |= (ascii_to_nibble(buf[2]) & 0xf)<< 4;
 		len |= ascii_to_nibble(buf[3]) & 0xf;
 
-		/* This might be wrong, but it works for current fw->fw */
 		if (len > MAX_BLOCK_LENGTH) {
 			fprintf(stderr, "Invalid block-length %u > %u for block %d!\n", len, MAX_BLOCK_LENGTH, fw->fw_blocks+1);
 			exit(EXIT_FAILURE);

@@ -138,8 +138,10 @@ int main(int argc, char **argv)
 			errno = 0;
 			pfd = hmcfgusb_poll(dev, 1);
 			if ((pfd < 0) && errno) {
-				perror("\n\nhmcfgusb_poll");
-				exit(EXIT_FAILURE);
+				if (errno != ETIMEDOUT) {
+					perror("\n\nhmcfgusb_poll");
+					exit(EXIT_FAILURE);
+				}
 			}
 			if (rdata.ack) {
 				break;
