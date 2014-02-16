@@ -97,13 +97,11 @@ int main(int argc, char **argv)
 		fprintf(stderr, "\nWaiting for device to reappear...\n");
 
 		do {
-			sleep(2);
-		} while ((dev = hmcfgusb_init(parse_hmcfgusb, &rdata)) == NULL);
-
-		if (!dev->bootloader) {
-			fprintf(stderr, "Can't enter bootloader, giving up!\n");
-			exit(EXIT_FAILURE);
-		}
+			if (dev) {
+				hmcfgusb_close(dev);
+			}
+			sleep(1);
+		} while (((dev = hmcfgusb_init(parse_hmcfgusb, &rdata)) == NULL) || (!dev->bootloader));
 	}
 
 	printf("\nHM-CFG-USB opened.\n\n");

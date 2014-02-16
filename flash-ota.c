@@ -41,6 +41,8 @@
 #include "version.h"
 #include "hmcfgusb.h"
 
+#define MAX_RETRIES	5
+
 uint32_t hmid = 0;
 uint32_t my_hmid = 0;
 
@@ -135,7 +137,13 @@ int send_hm_message(struct hmcfgusb_dev *dev, struct recv_data *rdata, uint8_t *
 			    ((rdata->status & 0xff) == 0x02)) {
 			    	break;
 			} else {
-				fprintf(stderr, "\nInvalid status: %04x\n", rdata->status);
+				if ((rdata->status & 0xff00) == 0x0400) {
+					fprintf(stderr, "\nOut of credits!\n");
+				} else if ((rdata->status & 0xff) == 0x08) {
+					fprintf(stderr, "\nMissing ACK!\n");
+				} else {
+					fprintf(stderr, "\nInvalid status: %04x\n", rdata->status);
+				}
 				return 0;
 			}
 		}
@@ -228,12 +236,34 @@ int main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}
 
-	if (dev->bootloader) {
-		fprintf(stderr, "\nHM-CFG-USB in bootloader mode, aborting!\n");
-		exit(EXIT_FAILURE);
+	printf("\nRebooting HM-CFG-USB to avoid running out of credits\n\n");
+
+	if (!dev->bootloader) {
+		printf("HM-CFG-USB not in bootloader mode, entering bootloader.\n");
+		hmcfgusb_enter_bootloader(dev);
+		printf("Waiting for device to reappear...\n");
+
+		do {
+			if (dev) {
+				hmcfgusb_close(dev);
+			}
+			sleep(1);
+		} while (((dev = hmcfgusb_init(parse_hmcfgusb, &rdata)) == NULL) || (!dev->bootloader));
 	}
 
-	printf("\nHM-CFG-USB opened\n\n");
+	if (dev->bootloader) {
+		printf("HM-CFG-USB in bootloader mode, rebooting\n");
+		hmcfgusb_leave_bootloader(dev);
+
+		do {
+			if (dev) {
+				hmcfgusb_close(dev);
+			}
+			sleep(1);
+		} while (((dev = hmcfgusb_init(parse_hmcfgusb, &rdata)) == NULL) || (dev->bootloader));
+	}
+
+	printf("\n\nHM-CFG-USB opened\n\n");
 
 	memset(out, 0, sizeof(out));
 	out[0] = 'K';
@@ -424,7 +454,7 @@ int main(int argc, char **argv)
 			} else {
 				pos = &(fw->fw[block][2]);
 				cnt++;
-				if (cnt == 3) {
+				if (cnt == MAX_RETRIES) {
 					fprintf(stderr, "\nToo many errors, giving up!\n");
 					exit(EXIT_FAILURE);
 				} else {
