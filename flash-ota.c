@@ -229,7 +229,7 @@ int main(int argc, char **argv)
 	}
 
 	if (dev->bootloader) {
-		fprintf(stderr, "\nHM-CFG-USB not in bootloader mode, aborting!\n");
+		fprintf(stderr, "\nHM-CFG-USB in bootloader mode, aborting!\n");
 		exit(EXIT_FAILURE);
 	}
 
