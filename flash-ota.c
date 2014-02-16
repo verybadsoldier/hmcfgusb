@@ -121,7 +121,7 @@ int send_hm_message(struct hmcfgusb_dev *dev, struct recv_data *rdata, uint8_t *
 	memcpy(&out[0x0f], msg, msg[0] + 1);
 
 	memset(rdata, 0, sizeof(struct recv_data));
-	hmcfgusb_send(dev, out, sizeof(out), 2);
+	hmcfgusb_send(dev, out, sizeof(out), 1);
 
 	while (1) {
 		if (rdata->message_type == MESSAGE_TYPE_R) {
@@ -129,7 +129,7 @@ int send_hm_message(struct hmcfgusb_dev *dev, struct recv_data *rdata, uint8_t *
 			    ((rdata->status & 0xff) == 0x02)) {
 			    	break;
 			} else {
-				fprintf(stderr, "\n\nInvalid status: %04x\n\n", rdata->status);
+				fprintf(stderr, "\nInvalid status: %04x\n", rdata->status);
 				return 0;
 			}
 		}
@@ -158,7 +158,7 @@ static int switch_speed(struct hmcfgusb_dev *dev, struct recv_data *rdata, uint8
 	out[0] = 'G';
 	out[1] = speed;
 
-	hmcfgusb_send(dev, out, sizeof(out), 2);
+	hmcfgusb_send(dev, out, sizeof(out), 1);
 
 	while (1) {
 		errno = 0;
@@ -271,7 +271,7 @@ int main(int argc, char **argv)
 	out[2] = (hmid >> 8) & 0xff;
 	out[3] = hmid & 0xff;
 
-	hmcfgusb_send(dev, out, sizeof(out), 2);
+	hmcfgusb_send(dev, out, sizeof(out), 1);
 
 	switchcnt = 3;
 	do {
@@ -330,6 +330,10 @@ int main(int argc, char **argv)
 		}
 	} while ((!switched) && (switchcnt--));
 
+	if (!switched) {
+		fprintf(stderr, "Too many errors, giving up!\n");
+		exit(EXIT_FAILURE);
+	}
 
 	printf("Yes!\n");
 
