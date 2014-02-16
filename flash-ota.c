@@ -53,6 +53,7 @@ struct recv_data {
 	enum message_type message_type;
 	uint16_t status;
 	int speed;
+	uint16_t hmcfgusb_version;
 };
 
 static int parse_hmcfgusb(uint8_t *buf, int buf_len, void *data)
@@ -81,6 +82,9 @@ static int parse_hmcfgusb(uint8_t *buf, int buf_len, void *data)
 			break;
 		case 'G':
 			rdata->speed = buf[1];
+			break;
+		case 'H':
+			rdata->hmcfgusb_version = (buf[11] << 8) | buf[12];
 			break;
 		default:
 			break;
@@ -228,6 +232,30 @@ int main(int argc, char **argv)
 	}
 
 	printf("\nHM-CFG-USB opened\n\n");
+
+	memset(out, 0, sizeof(out));
+	out[0] = 'K';
+	hmcfgusb_send(dev, out, sizeof(out), 1);
+
+	while (1) {
+		errno = 0;
+		pfd = hmcfgusb_poll(dev, 1);
+		if ((pfd < 0) && errno) {
+			if (errno != ETIMEDOUT) {
+				perror("\n\nhmcfgusb_poll");
+				exit(EXIT_FAILURE);
+			}
+		}
+		if (rdata.hmcfgusb_version)
+			break;
+	}
+
+	if (rdata.hmcfgusb_version < 0x3c7) {
+		fprintf(stderr, "HM-CFG-USB firmware too low: %u < 967\n", rdata.hmcfgusb_version);
+		exit(EXIT_FAILURE);
+	}
+
+	printf("HM-CFG-USB firmware version: %u\n", rdata.hmcfgusb_version);
 
 	if (!switch_speed(dev, &rdata, 10)) {
 		fprintf(stderr, "Can't switch speed!\n");
