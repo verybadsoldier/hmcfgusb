@@ -193,7 +193,7 @@ static int switch_speed(struct hmcfgusb_dev *dev, struct recv_data *rdata, uint8
 int main(int argc, char **argv)
 {
 	const char twiddlie[] = { '-', '\\', '|', '/' };
-	const uint8_t switch_msg[] = { 0x10, 0x5B, 0x11, 0xF8, 0x15, 0x47 };
+	const uint8_t cc1101_regs[] = { 0x10, 0x5B, 0x11, 0xF8, 0x15, 0x47 };
 	struct hmcfgusb_dev *dev;
 	struct recv_data rdata;
 	uint8_t out[0x40];
@@ -345,8 +345,8 @@ int main(int argc, char **argv)
 		SET_SRC(out, my_hmid);
 		SET_DST(out, hmid);
 
-		memcpy(&out[PAYLOAD], switch_msg, sizeof(switch_msg));
-		SET_LEN_FROM_PAYLOADLEN(out, sizeof(switch_msg));
+		memcpy(&out[PAYLOAD], cc1101_regs, sizeof(cc1101_regs));
+		SET_LEN_FROM_PAYLOADLEN(out, sizeof(cc1101_regs));
 
 		if (!send_hm_message(dev, &rdata, out)) {
 			exit(EXIT_FAILURE);
@@ -367,8 +367,8 @@ int main(int argc, char **argv)
 		SET_SRC(out, my_hmid);
 		SET_DST(out, hmid);
 
-		memcpy(&out[PAYLOAD], switch_msg, sizeof(switch_msg));
-		SET_LEN_FROM_PAYLOADLEN(out, sizeof(switch_msg));
+		memcpy(&out[PAYLOAD], cc1101_regs, sizeof(cc1101_regs));
+		SET_LEN_FROM_PAYLOADLEN(out, sizeof(cc1101_regs));
 
 		cnt = 3;
 		do {
