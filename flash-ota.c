@@ -42,6 +42,7 @@
 #include "hmcfgusb.h"
 
 uint32_t hmid = 0;
+uint32_t my_hmid = 0;
 
 enum message_type {
 	MESSAGE_TYPE_E,
@@ -85,6 +86,7 @@ static int parse_hmcfgusb(uint8_t *buf, int buf_len, void *data)
 			break;
 		case 'H':
 			rdata->hmcfgusb_version = (buf[11] << 8) | buf[12];
+			my_hmid = (buf[0x1b] << 16) | (buf[0x1c] << 8) | buf[0x1d];
 			break;
 		default:
 			break;
@@ -310,7 +312,7 @@ int main(int argc, char **argv)
 		out[MSGID] = msgid++;
 		out[CTL] = 0x00;
 		out[TYPE] = 0xCB;
-		SET_SRC(out, 0x000000);
+		SET_SRC(out, my_hmid);
 		SET_DST(out, hmid);
 
 		memcpy(&out[PAYLOAD], switch_msg, sizeof(switch_msg));
@@ -332,7 +334,7 @@ int main(int argc, char **argv)
 		out[MSGID] = msgid++;
 		out[CTL] = 0x20;
 		out[TYPE] = 0xCB;
-		SET_SRC(out, 0x000000);
+		SET_SRC(out, my_hmid);
 		SET_DST(out, hmid);
 
 		memcpy(&out[PAYLOAD], switch_msg, sizeof(switch_msg));
@@ -411,7 +413,7 @@ int main(int argc, char **argv)
 			if (ack)
 				out[CTL] = 0x20;
 			out[TYPE] = 0xCA;
-			SET_SRC(out, 0x000000);
+			SET_SRC(out, my_hmid);
 			SET_DST(out, hmid);
 
 			memcpy(&out[PAYLOAD], pos, payloadlen);
