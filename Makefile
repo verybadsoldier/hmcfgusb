@@ -6,10 +6,11 @@ CC=gcc
 HMLAN_OBJS=hmcfgusb.o hmland.o
 HMSNIFF_OBJS=hmcfgusb.o hmsniff.o
 FLASH_HMCFGUSB_OBJS=hmcfgusb.o firmware.o flash-hmcfgusb.o
+FLASH_OTA_OBJS=hmcfgusb.o firmware.o flash-ota.o
 
-OBJS=$(HMLAN_OBJS) $(HMSNIFF_OBJS) $(FLASH_HMCFGUSB_OBJS)
+OBJS=$(HMLAN_OBJS) $(HMSNIFF_OBJS) $(FLASH_HMCFGUSB_OBJS) $(FLASH_OTA_OBJS)
 
-all: hmland hmsniff flash-hmcfgusb
+all: hmland hmsniff flash-hmcfgusb flash-ota
 
 DEPEND=$(OBJS:.o=.d)
 -include $(DEPEND)
@@ -20,7 +21,9 @@ hmsniff: $(HMSNIFF_OBJS)
 
 flash-hmcfgusb: $(FLASH_HMCFGUSB_OBJS)
 
+flash-ota: $(FLASH_OTA_OBJS)
+
 clean:
-	rm -f $(HMLAN_OBJS) $(HMSNIFF_OBJS) $(FLASH_HMCFGUSB_OBJS) $(DEPEND) hmland hmsniff flash-hmcfgusb
+	rm -f $(HMLAN_OBJS) $(HMSNIFF_OBJS) $(FLASH_HMCFGUSB_OBJS) $(FLASH_OTA_OBJS) $(DEPEND) hmland hmsniff flash-hmcfgusb flash-ota
 
 .PHONY: all clean
