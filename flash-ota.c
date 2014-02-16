@@ -423,7 +423,7 @@ int main(int argc, char **argv)
 
 	firmware_free(fw);
 
-	printf("Entering 10k-mode\n");
+	printf("\nEntering 10k-mode\n");
 
 	memset(out, 0, sizeof(out));
 	out[0] = 'G';
