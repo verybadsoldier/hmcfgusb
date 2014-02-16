@@ -147,6 +147,35 @@ int send_hm_message(struct hmcfgusb_dev *dev, struct recv_data *rdata, uint8_t *
 	return 1;
 }
 
+static int switch_speed(struct hmcfgusb_dev *dev, struct recv_data *rdata, uint8_t speed)
+{
+	uint8_t out[0x40];
+	int pfd;
+
+	printf("Entering %uk-mode\n", speed);
+
+	memset(out, 0, sizeof(out));
+	out[0] = 'G';
+	out[1] = speed;
+
+	hmcfgusb_send(dev, out, sizeof(out), 2);
+
+	while (1) {
+		errno = 0;
+		pfd = hmcfgusb_poll(dev, 1);
+		if ((pfd < 0) && errno) {
+			if (errno != ETIMEDOUT) {
+				perror("\n\nhmcfgusb_poll");
+				exit(EXIT_FAILURE);
+			}
+		}
+		if (rdata->speed == speed)
+			break;
+	}
+
+	return 1;
+}
+
 int main(int argc, char **argv)
 {
 	const char twiddlie[] = { '-', '\\', '|', '/' };
@@ -162,6 +191,7 @@ int main(int argc, char **argv)
 	int pfd;
 	int debug = 0;
 	int cnt;
+	int switchcnt = 0;
 	int msgnum = 0;
 	int switched = 0;
 
@@ -199,24 +229,9 @@ int main(int argc, char **argv)
 
 	printf("\nHM-CFG-USB opened\n\n");
 
-	printf("Entering 10k-mode\n");
-
-	memset(out, 0, sizeof(out));
-	out[0] = 'G';
-	out[1] = 10;
-	hmcfgusb_send(dev, out, sizeof(out), 1);
-
-	while (1) {
-		errno = 0;
-		pfd = hmcfgusb_poll(dev, 1);
-		if ((pfd < 0) && errno) {
-			if (errno != ETIMEDOUT) {
-				perror("\n\nhmcfgusb_poll");
-				exit(EXIT_FAILURE);
-			}
-		}
-		if (rdata.speed == 10)
-			break;
+	if (!switch_speed(dev, &rdata, 10)) {
+		fprintf(stderr, "Can't switch speed!\n");
+		exit(EXIT_FAILURE);
 	}
 
 	printf("Waiting for device with serial %s\n", argv[2]);
@@ -258,6 +273,7 @@ int main(int argc, char **argv)
 
 	hmcfgusb_send(dev, out, sizeof(out), 2);
 
+	switchcnt = 3;
 	do {
 		printf("Initiating remote switch to 100k\n");
 
@@ -276,25 +292,9 @@ int main(int argc, char **argv)
 			exit(EXIT_FAILURE);
 		}
 
-		printf("Entering 100k-mode\n");
-
-		memset(out, 0, sizeof(out));
-		out[0] = 'G';
-		out[1] = 100;
-
-		hmcfgusb_send(dev, out, sizeof(out), 2);
-
-		while (1) {
-			errno = 0;
-			pfd = hmcfgusb_poll(dev, 1);
-			if ((pfd < 0) && errno) {
-				if (errno != ETIMEDOUT) {
-					perror("\n\nhmcfgusb_poll");
-					exit(EXIT_FAILURE);
-				}
-			}
-			if (rdata.speed == 100)
-				break;
+		if (!switch_speed(dev, &rdata, 100)) {
+			fprintf(stderr, "Can't switch speed!\n");
+			exit(EXIT_FAILURE);
 		}
 
 		printf("Has the device switched?\n");
@@ -321,30 +321,17 @@ int main(int argc, char **argv)
 		} while (cnt--);
 
 		if (!switched) {
-			printf("Entering 10k-mode\n");
+			printf("No!\n");
 
-			memset(out, 0, sizeof(out));
-			out[0] = 'G';
-			out[1] = 10;
-			hmcfgusb_send(dev, out, sizeof(out), 1);
-
-			while (1) {
-				errno = 0;
-				pfd = hmcfgusb_poll(dev, 1);
-				if ((pfd < 0) && errno) {
-					if (errno != ETIMEDOUT) {
-						perror("\n\nhmcfgusb_poll");
-						exit(EXIT_FAILURE);
-					}
-				}
-				if (rdata.speed == 10)
-					break;
+			if (!switch_speed(dev, &rdata, 10)) {
+				fprintf(stderr, "Can't switch speed!\n");
+				exit(EXIT_FAILURE);
 			}
 		}
-	} while (!switched);
+	} while ((!switched) && (switchcnt--));
 
 
-	printf("Initiating firmware upload!\n");
+	printf("Yes!\n");
 
 	printf("Flashing %d blocks", fw->fw_blocks);
 	if (debug) {
@@ -388,7 +375,7 @@ int main(int argc, char **argv)
 
 			memset(out, 0, sizeof(out));
 
-			out[MSGID] = msgid++;
+			out[MSGID] = msgid;
 			if (ack)
 				out[CTL] = 0x20;
 			out[TYPE] = 0xCA;
@@ -419,28 +406,16 @@ int main(int argc, char **argv)
 				fflush(stdout);
 			}
 		} while((pos - &(fw->fw[block][2])) < len);
+		msgid++;
 	}
 
 	firmware_free(fw);
 
-	printf("\nEntering 10k-mode\n");
+	printf("\n");
 
-	memset(out, 0, sizeof(out));
-	out[0] = 'G';
-	out[1] = 10;
-	hmcfgusb_send(dev, out, sizeof(out), 1);
-
-	while (1) {
-		errno = 0;
-		pfd = hmcfgusb_poll(dev, 1);
-		if ((pfd < 0) && errno) {
-			if (errno != ETIMEDOUT) {
-				perror("\n\nhmcfgusb_poll");
-				exit(EXIT_FAILURE);
-			}
-		}
-		if (rdata.speed == 10)
-			break;
+	if (!switch_speed(dev, &rdata, 10)) {
+		fprintf(stderr, "Can't switch speed!\n");
+		exit(EXIT_FAILURE);
 	}
 
 	printf("Waiting for device to reboot\n");
