@@ -450,8 +450,8 @@ int main(int argc, char **argv)
 	printf("Waiting for device with serial %s\n", serial);
 
 	while (1) {
+		errno = 0;
 		switch (dev.type) {
-			errno = 0;
 			case DEVICE_TYPE_CULFW:
 				pfd = culfw_poll(dev.culfw, 1);
 				break;
