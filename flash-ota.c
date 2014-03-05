@@ -207,7 +207,7 @@ int send_hm_message(struct ota_dev *dev, struct recv_data *rdata, uint8_t *msg)
 			break;
 		case DEVICE_TYPE_CULFW:
 			{
-				char buf[128];
+				char buf[256];
 				int i;
 
 				memset(buf, 0, sizeof(buf));
