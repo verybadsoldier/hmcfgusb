@@ -234,7 +234,7 @@ int send_hm_message(struct ota_dev *dev, struct recv_data *rdata, uint8_t *msg)
 						pfd = culfw_poll(dev->culfw, 1);
 						if ((pfd < 0) && errno) {
 							if (errno != ETIMEDOUT) {
-								perror("\n\nhmcfgusb_poll");
+								perror("\n\nculfw_poll");
 								exit(EXIT_FAILURE);
 							}
 						}
@@ -659,7 +659,7 @@ int main(int argc, char **argv)
 		}
 		if ((pfd < 0) && errno) {
 			if (errno != ETIMEDOUT) {
-				perror("\n\nhmcfgusb_poll");
+				perror("\n\npoll");
 				exit(EXIT_FAILURE);
 			}
 		}
