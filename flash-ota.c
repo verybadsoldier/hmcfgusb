@@ -40,15 +40,30 @@
 #include "hm.h"
 #include "version.h"
 #include "hmcfgusb.h"
+#include "culfw.h"
+#include "util.h"
 
 #define MAX_RETRIES	5
+
+extern char *optarg;
 
 uint32_t hmid = 0;
 uint32_t my_hmid = 0;
 
+enum device_type {
+	DEVICE_TYPE_HMCFGUSB,
+	DEVICE_TYPE_CULFW,
+};
+
+struct ota_dev {
+	int type;
+	struct hmcfgusb_dev *hmcfgusb;
+	struct culfw_dev *culfw;
+};
+
 enum message_type {
-	MESSAGE_TYPE_E,
-	MESSAGE_TYPE_R,
+	MESSAGE_TYPE_E = 1,
+	MESSAGE_TYPE_R = 2,
 };
 
 struct recv_data {
@@ -100,101 +115,203 @@ static int parse_hmcfgusb(uint8_t *buf, int buf_len, void *data)
 	return 1;
 }
 
-int send_hm_message(struct hmcfgusb_dev *dev, struct recv_data *rdata, uint8_t *msg)
+static int parse_culfw(uint8_t *buf, int buf_len, void *data)
+{
+	struct recv_data *rdata = data;
+	int pos = 0;
+
+	memset(rdata, 0, sizeof(struct recv_data));
+
+	if (buf_len <= 3)
+		return 0;
+
+	if (buf[0] != 'A')
+		return 0;
+
+	if (buf[1] == 's')
+		return 0;
+
+	while(validate_nibble(buf[(pos * 2) + 1]) &&
+	      validate_nibble(buf[(pos * 2) + 2]) &&
+	      (pos + 1 < buf_len)) {
+		rdata->message[pos] = ascii_to_nibble(buf[(pos * 2) + 1]) << 4;
+		rdata->message[pos] |= ascii_to_nibble(buf[(pos * 2) + 2]);
+		pos++;
+	}
+
+	if (hmid && (SRC(rdata->message) != hmid))
+		return 0;
+
+	rdata->message_type = MESSAGE_TYPE_E;
+
+	return 1;
+}
+
+int send_hm_message(struct ota_dev *dev, struct recv_data *rdata, uint8_t *msg)
 {
 	static uint32_t id = 1;
 	struct timeval tv;
 	uint8_t out[0x40];
 	int pfd;
 
-	if (gettimeofday(&tv, NULL) == -1) {
-		perror("gettimeofay");
-			return 0;
-	}
+	switch(dev->type) {
+		case DEVICE_TYPE_HMCFGUSB:
+			if (gettimeofday(&tv, NULL) == -1) {
+				perror("gettimeofay");
+					return 0;
+			}
 
-	memset(out, 0, sizeof(out));
+			memset(out, 0, sizeof(out));
 
-	out[0] = 'S';
-	out[1] = (id >> 24) & 0xff;
-	out[2] = (id >> 16) & 0xff;
-	out[3] = (id >> 8) & 0xff;
-	out[4] = id & 0xff;
-	out[10] = 0x01;
-	out[11] = (tv.tv_usec >> 24) & 0xff;
-	out[12] = (tv.tv_usec >> 16) & 0xff;
-	out[13] = (tv.tv_usec >> 8) & 0xff;
-	out[14] = tv.tv_usec & 0xff;
-	
+			out[0] = 'S';
+			out[1] = (id >> 24) & 0xff;
+			out[2] = (id >> 16) & 0xff;
+			out[3] = (id >> 8) & 0xff;
+			out[4] = id & 0xff;
+			out[10] = 0x01;
+			out[11] = (tv.tv_usec >> 24) & 0xff;
+			out[12] = (tv.tv_usec >> 16) & 0xff;
+			out[13] = (tv.tv_usec >> 8) & 0xff;
+			out[14] = tv.tv_usec & 0xff;
 
-	memcpy(&out[0x0f], msg, msg[0] + 1);
+			memcpy(&out[0x0f], msg, msg[0] + 1);
 
-	memset(rdata, 0, sizeof(struct recv_data));
-	hmcfgusb_send(dev, out, sizeof(out), 1);
+			memset(rdata, 0, sizeof(struct recv_data));
+			hmcfgusb_send(dev->hmcfgusb, out, sizeof(out), 1);
 
-	while (1) {
-		if (rdata->message_type == MESSAGE_TYPE_R) {
-			if (((rdata->status & 0xff) == 0x01) ||
-			    ((rdata->status & 0xff) == 0x02)) {
-			    	break;
-			} else {
-				if ((rdata->status & 0xff00) == 0x0400) {
-					fprintf(stderr, "\nOut of credits!\n");
-				} else if ((rdata->status & 0xff) == 0x08) {
-					fprintf(stderr, "\nMissing ACK!\n");
-				} else {
-					fprintf(stderr, "\nInvalid status: %04x\n", rdata->status);
+			while (1) {
+				if (rdata->message_type == MESSAGE_TYPE_R) {
+					if (((rdata->status & 0xff) == 0x01) ||
+					    ((rdata->status & 0xff) == 0x02)) {
+						break;
+					} else {
+						if ((rdata->status & 0xff00) == 0x0400) {
+							fprintf(stderr, "\nOut of credits!\n");
+						} else if ((rdata->status & 0xff) == 0x08) {
+							fprintf(stderr, "\nMissing ACK!\n");
+						} else {
+							fprintf(stderr, "\nInvalid status: %04x\n", rdata->status);
+						}
+						return 0;
+					}
 				}
-				return 0;
+				errno = 0;
+				pfd = hmcfgusb_poll(dev->hmcfgusb, 1);
+				if ((pfd < 0) && errno) {
+					if (errno != ETIMEDOUT) {
+						perror("\n\nhmcfgusb_poll");
+						exit(EXIT_FAILURE);
+					}
+				}
 			}
-		}
-		errno = 0;
-		pfd = hmcfgusb_poll(dev, 1);
-		if ((pfd < 0) && errno) {
-			if (errno != ETIMEDOUT) {
-				perror("\n\nhmcfgusb_poll");
-				exit(EXIT_FAILURE);
+			break;
+		case DEVICE_TYPE_CULFW:
+			{
+				char buf[128];
+				int i;
+
+				memset(buf, 0, sizeof(buf));
+				buf[0] = 'A';
+				buf[1] = 's';
+				for (i = 0; i < msg[0] + 1; i++) {
+					buf[2 + (i * 2)] = nibble_to_ascii((msg[i] >> 4) & 0xf);
+					buf[2 + (i * 2) + 1] = nibble_to_ascii(msg[i] & 0xf);
+				}
+				buf[2 + (i * 2) ] = '\r';
+				buf[2 + (i * 2) + 1] = '\n';
+
+				memset(rdata, 0, sizeof(struct recv_data));
+				if (culfw_send(dev->culfw, buf, 2 + (i * 2) + 1) == 0) {
+					fprintf(stderr, "culfw_send failed!\n");
+					exit(EXIT_FAILURE);
+				}
+
+				if (msg[CTL] & 0x20) {
+					int cnt = 10;
+					int pfd;
+					do {
+						errno = 0;
+						pfd = culfw_poll(dev->culfw, 1);
+						if ((pfd < 0) && errno) {
+							if (errno != ETIMEDOUT) {
+								perror("\n\nhmcfgusb_poll");
+								exit(EXIT_FAILURE);
+							}
+						}
+						if (rdata->message_type == MESSAGE_TYPE_E) {
+							break;
+						}
+					} while(cnt--);
+				}
 			}
-		}
+			break;
 	}
 
 	id++;
 	return 1;
 }
 
-static int switch_speed(struct hmcfgusb_dev *dev, struct recv_data *rdata, uint8_t speed)
+static int switch_speed(struct ota_dev *dev, struct recv_data *rdata, uint8_t speed)
 {
 	uint8_t out[0x40];
 	int pfd;
 
 	printf("Entering %uk-mode\n", speed);
 
-	memset(out, 0, sizeof(out));
-	out[0] = 'G';
-	out[1] = speed;
+	switch(dev->type) {
+		case DEVICE_TYPE_HMCFGUSB:
+			memset(out, 0, sizeof(out));
+			out[0] = 'G';
+			out[1] = speed;
 
-	hmcfgusb_send(dev, out, sizeof(out), 1);
+			hmcfgusb_send(dev->hmcfgusb, out, sizeof(out), 1);
 
-	while (1) {
-		errno = 0;
-		pfd = hmcfgusb_poll(dev, 1);
-		if ((pfd < 0) && errno) {
-			if (errno != ETIMEDOUT) {
-				perror("\n\nhmcfgusb_poll");
-				exit(EXIT_FAILURE);
+			while (1) {
+				errno = 0;
+				pfd = hmcfgusb_poll(dev->hmcfgusb, 1);
+				if ((pfd < 0) && errno) {
+					if (errno != ETIMEDOUT) {
+						perror("\n\nhmcfgusb_poll");
+						exit(EXIT_FAILURE);
+					}
+				}
+				if (rdata->speed == speed)
+					break;
 			}
-		}
-		if (rdata->speed == speed)
+			break;
+		case DEVICE_TYPE_CULFW:
+			if (speed == 100) {
+				return culfw_send(dev->culfw, "AR\r\n", 4);
+			} else {
+				return culfw_send(dev->culfw, "Ar\r\n", 4);
+			}
 			break;
 	}
 
 	return 1;
 }
 
+void flash_ota_syntax(char *prog)
+{
+	fprintf(stderr, "Syntax: %s parameters options\n\n", prog);
+	fprintf(stderr, "Mandatory parameters:\n");
+	fprintf(stderr, "\t-f firmware.eq3\tfirmware file to flash\n");
+	fprintf(stderr, "\t-s SERIAL\tserial of device to flash\n");
+	fprintf(stderr, "\nPossible options:\n");
+	fprintf(stderr, "\t-c device\tenable CUL-mode with CUL at path \"device\"\n");
+	fprintf(stderr, "\t-b bps\t\tuse CUL with speed \"bps\" (default: %u)\n", DEFAULT_CUL_BPS);
+	fprintf(stderr, "\t-h\t\tthis help\n");
+}
+
 int main(int argc, char **argv)
 {
 	const char twiddlie[] = { '-', '\\', '|', '/' };
 	const uint8_t cc1101_regs[] = { 0x10, 0x5B, 0x11, 0xF8, 0x15, 0x47 };
-	struct hmcfgusb_dev *dev;
+	char *fw_file = NULL;
+	char *serial = NULL;
+	char *culfw_dev = NULL;
+	unsigned int bps = DEFAULT_CUL_BPS;
+	struct ota_dev dev;
 	struct recv_data rdata;
 	uint8_t out[0x40];
 	uint8_t *pos;
@@ -208,100 +325,140 @@ int main(int argc, char **argv)
 	int switchcnt = 0;
 	int msgnum = 0;
 	int switched = 0;
+	int opt;
 
 	printf("HomeMatic OTA flasher version " VERSION "\n\n");
 
-	if (argc != 3) {
-		if (argc == 1)
-			fprintf(stderr, "Missing firmware filename!\n\n");
+	while((opt = getopt(argc, argv, "f:s:c:s:h")) != -1) {
+		switch (opt) {
+			case 'b':
+				bps = atoi(optarg);
+				break;
+			case 'c':
+				culfw_dev = optarg;
+				break;
+			case 'f':
+				fw_file = optarg;
+				break;
+			case 's':
+				serial = optarg;
+				break;
+			case 'h':
+			case ':':
+			case '?':
+			default:
+				flash_ota_syntax(argv[0]);
+				exit(EXIT_FAILURE);
+				break;
 
-		if (argc == 2)
-			fprintf(stderr, "Missing serial!\n\n");
+		}
+	}
 
-		fprintf(stderr, "Syntax: %s firmware.eq3 SERIALNUMBER\n\n", argv[0]);
+	if (!fw_file || !serial) {
+		flash_ota_syntax(argv[0]);
 		exit(EXIT_FAILURE);
 	}
 
-	fw = firmware_read_firmware(argv[1], debug);
+	fw = firmware_read_firmware(fw_file, debug);
 	if (!fw)
 		exit(EXIT_FAILURE);
 
-	hmcfgusb_set_debug(debug);
-
 	memset(&rdata, 0, sizeof(rdata));
+	memset(&dev, 0, sizeof(struct ota_dev));
 
-	dev = hmcfgusb_init(parse_hmcfgusb, &rdata);
-	if (!dev) {
-		fprintf(stderr, "Can't initialize HM-CFG-USB\n");
-		exit(EXIT_FAILURE);
-	}
-
-	printf("\nRebooting HM-CFG-USB to avoid running out of credits\n\n");
-
-	if (!dev->bootloader) {
-		printf("HM-CFG-USB not in bootloader mode, entering bootloader.\n");
-		hmcfgusb_enter_bootloader(dev);
-		printf("Waiting for device to reappear...\n");
-
-		do {
-			if (dev) {
-				hmcfgusb_close(dev);
-			}
-			sleep(1);
-		} while (((dev = hmcfgusb_init(parse_hmcfgusb, &rdata)) == NULL) || (!dev->bootloader));
-	}
-
-	if (dev->bootloader) {
-		printf("HM-CFG-USB in bootloader mode, rebooting\n");
-		hmcfgusb_leave_bootloader(dev);
-
-		do {
-			if (dev) {
-				hmcfgusb_close(dev);
-			}
-			sleep(1);
-		} while (((dev = hmcfgusb_init(parse_hmcfgusb, &rdata)) == NULL) || (dev->bootloader));
-	}
-
-	printf("\n\nHM-CFG-USB opened\n\n");
-
-	memset(out, 0, sizeof(out));
-	out[0] = 'K';
-	hmcfgusb_send(dev, out, sizeof(out), 1);
-
-	while (1) {
-		errno = 0;
-		pfd = hmcfgusb_poll(dev, 1);
-		if ((pfd < 0) && errno) {
-			if (errno != ETIMEDOUT) {
-				perror("\n\nhmcfgusb_poll");
-				exit(EXIT_FAILURE);
-			}
+	if (culfw_dev) {
+		dev.culfw = culfw_init(culfw_dev, bps, parse_culfw, &rdata);
+		if (!dev.culfw) {
+			fprintf(stderr, "Can't initialize CUL at %s with rate %u\n", culfw_dev, bps);
+			exit(EXIT_FAILURE);
 		}
-		if (rdata.hmcfgusb_version)
-			break;
+		dev.type = DEVICE_TYPE_CULFW;
+	} else {
+		hmcfgusb_set_debug(debug);
+
+		dev.hmcfgusb = hmcfgusb_init(parse_hmcfgusb, &rdata);
+		if (!dev.hmcfgusb) {
+			fprintf(stderr, "Can't initialize HM-CFG-USB\n");
+			exit(EXIT_FAILURE);
+		}
+		dev.type = DEVICE_TYPE_HMCFGUSB;
+
+		printf("\nRebooting HM-CFG-USB to avoid running out of credits\n\n");
+
+		if (!dev.hmcfgusb->bootloader) {
+			printf("HM-CFG-USB not in bootloader mode, entering bootloader.\n");
+			hmcfgusb_enter_bootloader(dev.hmcfgusb);
+			printf("Waiting for device to reappear...\n");
+
+			do {
+				if (dev.hmcfgusb) {
+					hmcfgusb_close(dev.hmcfgusb);
+				}
+				sleep(1);
+			} while (((dev.hmcfgusb = hmcfgusb_init(parse_hmcfgusb, &rdata)) == NULL) || (!dev.hmcfgusb->bootloader));
+		}
+
+		if (dev.hmcfgusb->bootloader) {
+			printf("HM-CFG-USB in bootloader mode, rebooting\n");
+			hmcfgusb_leave_bootloader(dev.hmcfgusb);
+
+			do {
+				if (dev.hmcfgusb) {
+					hmcfgusb_close(dev.hmcfgusb);
+				}
+				sleep(1);
+			} while (((dev.hmcfgusb = hmcfgusb_init(parse_hmcfgusb, &rdata)) == NULL) || (dev.hmcfgusb->bootloader));
+		}
+
+		printf("\n\nHM-CFG-USB opened\n\n");
+
+		memset(out, 0, sizeof(out));
+		out[0] = 'K';
+		hmcfgusb_send(dev.hmcfgusb, out, sizeof(out), 1);
+
+		while (1) {
+			errno = 0;
+			pfd = hmcfgusb_poll(dev.hmcfgusb, 1);
+			if ((pfd < 0) && errno) {
+				if (errno != ETIMEDOUT) {
+					perror("\n\nhmcfgusb_poll");
+					exit(EXIT_FAILURE);
+				}
+			}
+			if (rdata.hmcfgusb_version)
+				break;
+		}
+
+		if (rdata.hmcfgusb_version < 0x3c7) {
+			fprintf(stderr, "HM-CFG-USB firmware too low: %u < 967\n", rdata.hmcfgusb_version);
+			exit(EXIT_FAILURE);
+		}
+
+		printf("HM-CFG-USB firmware version: %u\n", rdata.hmcfgusb_version);
 	}
 
-	if (rdata.hmcfgusb_version < 0x3c7) {
-		fprintf(stderr, "HM-CFG-USB firmware too low: %u < 967\n", rdata.hmcfgusb_version);
-		exit(EXIT_FAILURE);
-	}
-
-	printf("HM-CFG-USB firmware version: %u\n", rdata.hmcfgusb_version);
-
-	if (!switch_speed(dev, &rdata, 10)) {
+	if (!switch_speed(&dev, &rdata, 10)) {
 		fprintf(stderr, "Can't switch speed!\n");
 		exit(EXIT_FAILURE);
 	}
 
-	printf("Waiting for device with serial %s\n", argv[2]);
+	printf("Waiting for device with serial %s\n", serial);
 
 	while (1) {
-		errno = 0;
-		pfd = hmcfgusb_poll(dev, 1);
+		switch (dev.type) {
+			errno = 0;
+			case DEVICE_TYPE_CULFW:
+				pfd = culfw_poll(dev.culfw, 1);
+				break;
+			case DEVICE_TYPE_HMCFGUSB:
+			default:
+				pfd = hmcfgusb_poll(dev.hmcfgusb, 1);
+				break;
+		}
+
 		if ((pfd < 0) && errno) {
 			if (errno != ETIMEDOUT) {
-				perror("\n\nhmcfgusb_poll");
+				perror("\n\npoll");
 				exit(EXIT_FAILURE);
 			}
 		}
@@ -311,27 +468,27 @@ int main(int argc, char **argv)
 		    (rdata.message[CTL] == 0x00) && /* Control Byte */
 		    (rdata.message[TYPE] == 0x10) && /* Messagte type: Information */
 		    (DST(rdata.message) == 0x000000) && /* Broadcast */
-		    (rdata.message[PAYLOAD] == 0x00) && /* FUP? */
-		    (rdata.message[PAYLOAD+2] == 'E') &&
-		    (rdata.message[PAYLOAD+3] == 'Q')) {
-			if (!strncmp((char*)&(rdata.message[0x0b]), argv[2], 10)) {
+		    (rdata.message[PAYLOAD] == 0x00)) { /* FUP? */
+			if (!strncmp((char*)&(rdata.message[0x0b]), serial, 10)) {
 				hmid = SRC(rdata.message);
 				break;
 			}
 		}
 	}
 
-	printf("Device with serial %s (hmid: %06x) entered firmware-update-mode\n", argv[2], hmid);
+	printf("Device with serial %s (hmid: %06x) entered firmware-update-mode\n", serial, hmid);
 
-	printf("Adding HMID\n");
+	if (dev.type == DEVICE_TYPE_HMCFGUSB) {
+		printf("Adding HMID\n");
 
-	memset(out, 0, sizeof(out));
-	out[0] = '+';
-	out[1] = (hmid >> 16) & 0xff;
-	out[2] = (hmid >> 8) & 0xff;
-	out[3] = hmid & 0xff;
+		memset(out, 0, sizeof(out));
+		out[0] = '+';
+		out[1] = (hmid >> 16) & 0xff;
+		out[2] = (hmid >> 8) & 0xff;
+		out[3] = hmid & 0xff;
 
-	hmcfgusb_send(dev, out, sizeof(out), 1);
+		hmcfgusb_send(dev.hmcfgusb, out, sizeof(out), 1);
+	}
 
 	switchcnt = 3;
 	do {
@@ -348,11 +505,11 @@ int main(int argc, char **argv)
 		memcpy(&out[PAYLOAD], cc1101_regs, sizeof(cc1101_regs));
 		SET_LEN_FROM_PAYLOADLEN(out, sizeof(cc1101_regs));
 
-		if (!send_hm_message(dev, &rdata, out)) {
+		if (!send_hm_message(&dev, &rdata, out)) {
 			exit(EXIT_FAILURE);
 		}
 
-		if (!switch_speed(dev, &rdata, 100)) {
+		if (!switch_speed(&dev, &rdata, 100)) {
 			fprintf(stderr, "Can't switch speed!\n");
 			exit(EXIT_FAILURE);
 		}
@@ -372,18 +529,17 @@ int main(int argc, char **argv)
 
 		cnt = 3;
 		do {
-			if (send_hm_message(dev, &rdata, out)) {
+			if (send_hm_message(&dev, &rdata, out)) {
 				/* A0A02000221B9AD00000000 */
 				switched = 1;
 				break;
-				
 			}
 		} while (cnt--);
 
 		if (!switched) {
 			printf("No!\n");
 
-			if (!switch_speed(dev, &rdata, 10)) {
+			if (!switch_speed(&dev, &rdata, 10)) {
 				fprintf(stderr, "Can't switch speed!\n");
 				exit(EXIT_FAILURE);
 			}
@@ -449,7 +605,7 @@ int main(int argc, char **argv)
 			memcpy(&out[PAYLOAD], pos, payloadlen);
 			SET_LEN_FROM_PAYLOADLEN(out, payloadlen);
 
-			if (send_hm_message(dev, &rdata, out)) {
+			if (send_hm_message(&dev, &rdata, out)) {
 				pos += payloadlen;
 			} else {
 				pos = &(fw->fw[block][2]);
@@ -477,7 +633,7 @@ int main(int argc, char **argv)
 
 	printf("\n");
 
-	if (!switch_speed(dev, &rdata, 10)) {
+	if (!switch_speed(&dev, &rdata, 10)) {
 		fprintf(stderr, "Can't switch speed!\n");
 		exit(EXIT_FAILURE);
 	}
@@ -487,7 +643,15 @@ int main(int argc, char **argv)
 	cnt = 10;
 	do {
 		errno = 0;
-		pfd = hmcfgusb_poll(dev, 1);
+		switch(dev.type) {
+			case DEVICE_TYPE_CULFW:
+				pfd = culfw_poll(dev.culfw, 1);
+				break;
+			case DEVICE_TYPE_HMCFGUSB:
+			default:
+				pfd = hmcfgusb_poll(dev.hmcfgusb, 1);
+				break;
+		}
 		if ((pfd < 0) && errno) {
 			if (errno != ETIMEDOUT) {
 				perror("\n\nhmcfgusb_poll");
@@ -503,7 +667,14 @@ int main(int argc, char **argv)
 		printf("Device rebooted\n");
 	}
 
-	hmcfgusb_close(dev);
+	switch(dev.type) {
+		case DEVICE_TYPE_HMCFGUSB:
+			hmcfgusb_close(dev.hmcfgusb);
+			break;
+		case DEVICE_TYPE_CULFW:
+			culfw_close(dev.culfw);
+			break;
+	}
 
 	return EXIT_SUCCESS;
 }

@@ -33,35 +33,11 @@
 #include <fcntl.h>
 #include <sys/time.h>
 
+#include "util.h"
 #include "firmware.h"
 
 /* This might be wrong, but it works for current fw */
 #define MAX_BLOCK_LENGTH	512
-
-static uint8_t ascii_to_nibble(uint8_t a)
-{
-	uint8_t c = 0x00;
-
-	if ((a >= '0') && (a <= '9')) {
-		c = a - '0';
-	} else if ((a >= 'A') && (a <= 'F')) {
-		c = (a - 'A') + 10;
-	} else if ((a >= 'a') && (a <= 'f')) {
-		c = (a - 'a') + 10;
-	}
-
-	return c;
-}
-
-static int validate_nibble(uint8_t a)
-{
-	if (((a >= '0') && (a <= '9')) ||
-	    ((a >= 'A') && (a <= 'F')) ||
-	    ((a >= 'a') && (a <= 'f')))
-	    	return 1;
-
-	return 0;
-}
 
 struct firmware* firmware_read_firmware(char *filename, int debug)
 {

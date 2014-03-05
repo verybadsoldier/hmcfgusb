@@ -1,3 +1,5 @@
+culfw.d
+culfw.o
 flash-hmcfgusb
 flash-hmcfgusb.d
 flash-hmcfgusb.o
@@ -14,5 +16,7 @@ hmland.o
 hmsniff
 hmsniff.d
 hmsniff.o
+util.d
+util.o
 *.enc
 *.eq3
