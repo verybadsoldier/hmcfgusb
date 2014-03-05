@@ -35,3 +35,4 @@ struct culfw_dev *culfw_init(char *device, uint32_t speed, culfw_cb_fn cb, void 
 int culfw_send(struct culfw_dev *dev, char *cmd, int cmdlen);
 int culfw_poll(struct culfw_dev *dev, int timeout);
 void culfw_close(struct culfw_dev *dev);
+void culfw_flush(struct culfw_dev *dev);

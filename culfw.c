@@ -175,3 +175,34 @@ void culfw_close(struct culfw_dev *dev)
 {
 	close(dev->fd);
 }
+
+void culfw_flush(struct culfw_dev *dev)
+{
+	struct pollfd pfds[1];
+	int ret;
+	int r = 0;
+	uint8_t buf[1024];
+
+	tcflush(dev->fd, TCIOFLUSH);
+
+	while(1) {
+		memset(pfds, 0, sizeof(struct pollfd) * 1);
+
+		pfds[0].fd = dev->fd;
+		pfds[0].events = POLLIN;
+
+		ret = poll(pfds, 1, 100);
+		if (ret <= 0)
+			break;
+
+		if (!(pfds[0].revents & POLLIN))
+			break;
+
+		memset(buf, 0, sizeof(buf));
+		r = read(dev->fd, buf, sizeof(buf));
+		if (r <= 0)
+			break;
+	}
+
+	return;
+}

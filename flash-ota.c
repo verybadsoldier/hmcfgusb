@@ -71,7 +71,7 @@ struct recv_data {
 	enum message_type message_type;
 	uint16_t status;
 	int speed;
-	uint16_t hmcfgusb_version;
+	uint16_t version;
 };
 
 static int parse_hmcfgusb(uint8_t *buf, int buf_len, void *data)
@@ -102,7 +102,7 @@ static int parse_hmcfgusb(uint8_t *buf, int buf_len, void *data)
 			rdata->speed = buf[1];
 			break;
 		case 'H':
-			rdata->hmcfgusb_version = (buf[11] << 8) | buf[12];
+			rdata->version = (buf[11] << 8) | buf[12];
 			my_hmid = (buf[0x1b] << 16) | (buf[0x1c] << 8) | buf[0x1d];
 			break;
 		default:
@@ -125,24 +125,56 @@ static int parse_culfw(uint8_t *buf, int buf_len, void *data)
 	if (buf_len <= 3)
 		return 0;
 
-	if (buf[0] != 'A')
-		return 0;
+	switch(buf[0]) {
+		case 'A':
+			if (buf[1] == 's')
+				return 0;
 
-	if (buf[1] == 's')
-		return 0;
+			while(validate_nibble(buf[(pos * 2) + 1]) &&
+			      validate_nibble(buf[(pos * 2) + 2]) &&
+			      (pos + 1 < buf_len)) {
+				rdata->message[pos] = ascii_to_nibble(buf[(pos * 2) + 1]) << 4;
+				rdata->message[pos] |= ascii_to_nibble(buf[(pos * 2) + 2]);
+				pos++;
+			}
 
-	while(validate_nibble(buf[(pos * 2) + 1]) &&
-	      validate_nibble(buf[(pos * 2) + 2]) &&
-	      (pos + 1 < buf_len)) {
-		rdata->message[pos] = ascii_to_nibble(buf[(pos * 2) + 1]) << 4;
-		rdata->message[pos] |= ascii_to_nibble(buf[(pos * 2) + 2]);
-		pos++;
+			if (hmid && (SRC(rdata->message) != hmid))
+				return 0;
+
+			rdata->message_type = MESSAGE_TYPE_E;
+			break;
+		case 'V':
+			{
+				uint8_t v;
+				char *s;
+				char *e;
+
+				s = ((char*)buf) + 2;
+				e = strchr(s, '.');
+				if (!e) {
+					fprintf(stderr, "Unknown response from CUL: %s", buf);
+					return 0;
+				}
+				*e = '\0';
+				v = atoi(s);
+				rdata->version = v << 8;
+
+				s = e + 1;
+				e = strchr(s, ' ');
+				if (!e) {
+					fprintf(stderr, "Unknown response from CUL: %s", buf);
+					return 0;
+				}
+				*e = '\0';
+				v = atoi(s);
+				rdata->version |= v;
+			}
+			break;
+		default:
+			fprintf(stderr, "Unknown response from CUL: %s", buf);
+			return 0;
+			break;
 	}
-
-	if (hmid && (SRC(rdata->message) != hmid))
-		return 0;
-
-	rdata->message_type = MESSAGE_TYPE_E;
 
 	return 1;
 }
@@ -372,12 +404,43 @@ int main(int argc, char **argv)
 	memset(&dev, 0, sizeof(struct ota_dev));
 
 	if (culfw_dev) {
+		printf("Opening culfw-device at path %s with speed %u\n", culfw_dev, bps);
 		dev.culfw = culfw_init(culfw_dev, bps, parse_culfw, &rdata);
 		if (!dev.culfw) {
 			fprintf(stderr, "Can't initialize CUL at %s with rate %u\n", culfw_dev, bps);
 			exit(EXIT_FAILURE);
 		}
 		dev.type = DEVICE_TYPE_CULFW;
+
+		printf("Requesting firmware-version\n");
+		culfw_send(dev.culfw, "\r\n", 2);
+		culfw_flush(dev.culfw);
+
+		while (1) {
+			culfw_send(dev.culfw, "V\r\n", 3);
+
+			errno = 0;
+			pfd = culfw_poll(dev.culfw, 1);
+			if ((pfd < 0) && errno) {
+				if (errno != ETIMEDOUT) {
+					perror("\n\nhmcfgusb_poll");
+					exit(EXIT_FAILURE);
+				}
+			}
+			if (rdata.version)
+				break;
+		}
+
+		printf("culfw-device firmware version: %u.%02u\n", 
+			(rdata.version >> 8) & 0xff,
+			rdata.version & 0xff);
+
+		if (rdata.version < 0x0139) {
+			fprintf(stderr, "\nThis version does _not_ support firmware upgrade mode!\n");
+			exit(EXIT_FAILURE);
+		} else if (rdata.version < 0x0140) {
+			printf("\n*** This version probably not supports firmware upgrade mode! ***\n\n");
+		}
 	} else {
 		hmcfgusb_set_debug(debug);
 
@@ -430,16 +493,16 @@ int main(int argc, char **argv)
 					exit(EXIT_FAILURE);
 				}
 			}
-			if (rdata.hmcfgusb_version)
+			if (rdata.version)
 				break;
 		}
 
-		if (rdata.hmcfgusb_version < 0x3c7) {
-			fprintf(stderr, "HM-CFG-USB firmware too low: %u < 967\n", rdata.hmcfgusb_version);
+		if (rdata.version < 0x3c7) {
+			fprintf(stderr, "HM-CFG-USB firmware too low: %u < 967\n", rdata.version);
 			exit(EXIT_FAILURE);
 		}
 
-		printf("HM-CFG-USB firmware version: %u\n", rdata.hmcfgusb_version);
+		printf("HM-CFG-USB firmware version: %u\n", rdata.version);
 	}
 
 	if (!switch_speed(&dev, &rdata, 10)) {
