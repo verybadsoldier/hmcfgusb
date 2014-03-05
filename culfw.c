@@ -167,7 +167,8 @@ int culfw_poll(struct culfw_dev *dev, int timeout)
 
 	dev->cb(buf, r, dev->cb_data);
 
-	return pfds[0].fd;
+	errno = 0;
+	return -1;
 }
 
 void culfw_close(struct culfw_dev *dev)
