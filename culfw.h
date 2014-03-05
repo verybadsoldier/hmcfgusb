@@ -21,7 +21,7 @@
  * IN THE SOFTWARE.
  */
 
-#define DEFAULT_CUL_BPS	19200
+#define DEFAULT_CUL_BPS	38400
 
 typedef int (*culfw_cb_fn)(uint8_t *buf, int buf_len, void *data);
 

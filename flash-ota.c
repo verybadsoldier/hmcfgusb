@@ -329,7 +329,7 @@ int main(int argc, char **argv)
 
 	printf("HomeMatic OTA flasher version " VERSION "\n\n");
 
-	while((opt = getopt(argc, argv, "f:s:c:s:h")) != -1) {
+	while((opt = getopt(argc, argv, "b:c:f:hs:")) != -1) {
 		switch (opt) {
 			case 'b':
 				bps = atoi(optarg);
