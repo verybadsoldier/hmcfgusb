@@ -227,7 +227,7 @@ int send_hm_message(struct ota_dev *dev, struct recv_data *rdata, uint8_t *msg)
 				}
 
 				if (msg[CTL] & 0x20) {
-					int cnt = 10;
+					int cnt = 3;
 					int pfd;
 					do {
 						errno = 0;
@@ -242,6 +242,11 @@ int send_hm_message(struct ota_dev *dev, struct recv_data *rdata, uint8_t *msg)
 							break;
 						}
 					} while(cnt--);
+
+					if (cnt == -1) {
+						fprintf(stderr, "\nMissing ACK!\n");
+						return 0;
+					}
 				}
 			}
 			break;
