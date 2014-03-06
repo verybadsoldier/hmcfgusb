@@ -508,7 +508,7 @@ static int comm(int fd_in, int fd_out, int master_socket, int flags)
 	while(!quit) {
 		int fd;
 
-		fd = hmcfgusb_poll(dev, 1);	/* Wakeup device/bus at least once a second */
+		fd = hmcfgusb_poll(dev, 1000);	/* Wakeup device/bus at least once a second */
 		if (fd >= 0) {
 			if (fd == master_socket) {
 				int client;

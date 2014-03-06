@@ -141,7 +141,7 @@ int culfw_poll(struct culfw_dev *dev, int timeout)
 	pfds[0].fd = dev->fd;
 	pfds[0].events = POLLIN;
 
-	ret = poll(pfds, 1, timeout * 1000);
+	ret = poll(pfds, 1, timeout);
 	if (ret == -1)
 		return -1;
 

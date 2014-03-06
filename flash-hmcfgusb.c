@@ -134,7 +134,7 @@ int main(int argc, char **argv)
 			printf("Waiting for ack...\n");
 		do {
 			errno = 0;
-			pfd = hmcfgusb_poll(dev, 1);
+			pfd = hmcfgusb_poll(dev, 1000);
 			if ((pfd < 0) && errno) {
 				if (errno != ETIMEDOUT) {
 					perror("\n\nhmcfgusb_poll");

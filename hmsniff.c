@@ -201,7 +201,7 @@ int main(int argc, char **argv)
 				rdata.wrong_hmid = 0;
 				hmcfgusb_send(dev, (unsigned char*)"K", 1, 1);
 			}
-			fd = hmcfgusb_poll(dev, 1);
+			fd = hmcfgusb_poll(dev, 1000);
 			if (fd >= 0) {
 				fprintf(stderr, "activity on unknown fd %d!\n", fd);
 				continue;

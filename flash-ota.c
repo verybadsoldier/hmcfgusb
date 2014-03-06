@@ -228,7 +228,7 @@ int send_hm_message(struct ota_dev *dev, struct recv_data *rdata, uint8_t *msg)
 					}
 				}
 				errno = 0;
-				pfd = hmcfgusb_poll(dev->hmcfgusb, 1);
+				pfd = hmcfgusb_poll(dev->hmcfgusb, 1000);
 				if ((pfd < 0) && errno) {
 					if (errno != ETIMEDOUT) {
 						perror("\n\nhmcfgusb_poll");
@@ -263,7 +263,7 @@ int send_hm_message(struct ota_dev *dev, struct recv_data *rdata, uint8_t *msg)
 					int pfd;
 					do {
 						errno = 0;
-						pfd = culfw_poll(dev->culfw, 1);
+						pfd = culfw_poll(dev->culfw, 200);
 						if ((pfd < 0) && errno) {
 							if (errno != ETIMEDOUT) {
 								perror("\n\nculfw_poll");
@@ -305,7 +305,7 @@ static int switch_speed(struct ota_dev *dev, struct recv_data *rdata, uint8_t sp
 
 			while (1) {
 				errno = 0;
-				pfd = hmcfgusb_poll(dev->hmcfgusb, 1);
+				pfd = hmcfgusb_poll(dev->hmcfgusb, 1000);
 				if ((pfd < 0) && errno) {
 					if (errno != ETIMEDOUT) {
 						perror("\n\nhmcfgusb_poll");
@@ -420,7 +420,7 @@ int main(int argc, char **argv)
 			culfw_send(dev.culfw, "V\r\n", 3);
 
 			errno = 0;
-			pfd = culfw_poll(dev.culfw, 1);
+			pfd = culfw_poll(dev.culfw, 1000);
 			if ((pfd < 0) && errno) {
 				if (errno != ETIMEDOUT) {
 					perror("\n\nhmcfgusb_poll");
@@ -486,7 +486,7 @@ int main(int argc, char **argv)
 
 		while (1) {
 			errno = 0;
-			pfd = hmcfgusb_poll(dev.hmcfgusb, 1);
+			pfd = hmcfgusb_poll(dev.hmcfgusb, 1000);
 			if ((pfd < 0) && errno) {
 				if (errno != ETIMEDOUT) {
 					perror("\n\nhmcfgusb_poll");
@@ -516,11 +516,11 @@ int main(int argc, char **argv)
 		errno = 0;
 		switch (dev.type) {
 			case DEVICE_TYPE_CULFW:
-				pfd = culfw_poll(dev.culfw, 1);
+				pfd = culfw_poll(dev.culfw, 1000);
 				break;
 			case DEVICE_TYPE_HMCFGUSB:
 			default:
-				pfd = hmcfgusb_poll(dev.hmcfgusb, 1);
+				pfd = hmcfgusb_poll(dev.hmcfgusb, 1000);
 				break;
 		}
 
@@ -713,11 +713,11 @@ int main(int argc, char **argv)
 		errno = 0;
 		switch(dev.type) {
 			case DEVICE_TYPE_CULFW:
-				pfd = culfw_poll(dev.culfw, 1);
+				pfd = culfw_poll(dev.culfw, 1000);
 				break;
 			case DEVICE_TYPE_HMCFGUSB:
 			default:
-				pfd = hmcfgusb_poll(dev.hmcfgusb, 1);
+				pfd = hmcfgusb_poll(dev.hmcfgusb, 1000);
 				break;
 		}
 		if ((pfd < 0) && errno) {

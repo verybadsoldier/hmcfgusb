@@ -433,13 +433,11 @@ int hmcfgusb_poll(struct hmcfgusb_dev *dev, int timeout)
 		return -1;
 	} else if (err == 0) {
 		/* No pending timeout or a sane platform */
-		tv.tv_sec = timeout;
 	} else {
 		if ((tv.tv_sec == 0) && (tv.tv_usec == 0)) {
 			usb_event = 1;
-		} else if (tv.tv_sec > timeout) {
-			tv.tv_sec = timeout;
-			tv.tv_usec = 0;
+		} else if ((tv.tv_sec * 1000) < timeout) {
+			timeout = tv.tv_sec * 1000;
 		}
 	}
 
@@ -448,7 +446,7 @@ int hmcfgusb_poll(struct hmcfgusb_dev *dev, int timeout)
 			dev->pfd[i].revents = 0;
 		}
 
-		n = poll(dev->pfd, dev->n_pfd, tv.tv_sec * 1000);
+		n = poll(dev->pfd, dev->n_pfd, timeout);
 		if (n < 0) {
 			perror("poll");
 			errno = 0;
