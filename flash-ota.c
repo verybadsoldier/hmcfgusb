@@ -435,11 +435,9 @@ int main(int argc, char **argv)
 			(rdata.version >> 8) & 0xff,
 			rdata.version & 0xff);
 
-		if (rdata.version < 0x0139) {
-			fprintf(stderr, "\nThis version does _not_ support firmware upgrade mode!\n");
+		if (rdata.version < 0x013a) {
+			fprintf(stderr, "\nThis version does _not_ support firmware upgrade mode, you need at least 1.58!\n");
 			exit(EXIT_FAILURE);
-		} else if (rdata.version < 0x0140) {
-			printf("\n*** This version probably not supports firmware upgrade mode! ***\n\n");
 		}
 	} else {
 		hmcfgusb_set_debug(debug);
