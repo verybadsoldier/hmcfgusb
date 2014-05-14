@@ -55,6 +55,7 @@ static int verbose = 0;
 static int reboot_seconds = 0;
 static int reboot_at_hour = -1;
 static int reboot_at_minute = -1;
+static int reboot_set = 0;
 
 struct queued_rx {
 	char *rx;
@@ -211,6 +212,7 @@ static int hmlan_format_out(uint8_t *buf, int buf_len, void *data)
 	uint8_t out[1024];
 	uint8_t *outpos;
 	uint8_t *inpos;
+	uint16_t version;
 	int fd = *((int*)data);
 	int w;
 
@@ -230,12 +232,30 @@ static int hmlan_format_out(uint8_t *buf, int buf_len, void *data)
 				buf[7] = 'N';
 			}
 			format_part_out(&inpos, (buf_len-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), 0, FLAG_LENGTH_BYTE);
+			version = inpos[0] << 8;
+			version |= inpos[1];
 			format_part_out(&inpos, (buf_len-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), 2, FLAG_FORMAT_HEX | FLAG_COMMA_BEFORE);
 			format_part_out(&inpos, (buf_len-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), 0, FLAG_COMMA_BEFORE | FLAG_LENGTH_BYTE);
 			format_part_out(&inpos, (buf_len-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), 3, FLAG_FORMAT_HEX | FLAG_COMMA_BEFORE);
 			format_part_out(&inpos, (buf_len-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), 3, FLAG_FORMAT_HEX | FLAG_COMMA_BEFORE);
 			format_part_out(&inpos, (buf_len-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), 4, FLAG_FORMAT_HEX | FLAG_COMMA_BEFORE);
 			format_part_out(&inpos, (buf_len-(inpos-buf)), &outpos, (sizeof(out)-(outpos-out)), 2, FLAG_FORMAT_HEX | FLAG_COMMA_BEFORE | FLAG_NL);
+
+			if (!reboot_set) {
+				int new_reboot_seconds;
+
+				if (version < 0x03c7) {
+					new_reboot_seconds = DEFAULT_REBOOT_SECONDS;
+				} else {
+					new_reboot_seconds = 0;
+				}
+
+				if (verbose && new_reboot_seconds && (reboot_seconds != new_reboot_seconds))
+					printf("Rebooting in %u seconds due to old firmware (0.%d)\n",
+						new_reboot_seconds, version);
+
+				reboot_seconds = new_reboot_seconds;
+			}
 
 			break;
 		case 'E':
@@ -744,7 +764,7 @@ void hmlan_syntax(char *prog)
 	fprintf(stderr, "\t-l ip\t\tlisten on given IP address only (for example 127.0.0.1)\n");
 	fprintf(stderr, "\t-P\t\tcreate PID file " PID_FILE " in daemon mode\n");
 	fprintf(stderr, "\t-p n\t\tlisten on port n (default: 1000)\n");
-	fprintf(stderr, "\t-r n\t\treboot HM-CFG-USB after n seconds (0: no reboot, default: %u)\n", DEFAULT_REBOOT_SECONDS);
+	fprintf(stderr, "\t-r n\t\treboot HM-CFG-USB after n seconds (0: no reboot, default: %u if FW < 0.967, 0 otherwise)\n", DEFAULT_REBOOT_SECONDS);
 	fprintf(stderr, "\t   hh:mm\treboot HM-CFG-USB daily at hh:mm\n");
 	fprintf(stderr, "\t-v\t\tverbose mode\n");
 	fprintf(stderr, "\t-V\t\tshow version (" VERSION ")\n");
@@ -760,8 +780,6 @@ int main(int argc, char **argv)
 	char *ep;
 	int opt;
 	
-	reboot_seconds = DEFAULT_REBOOT_SECONDS;
-
 	while((opt = getopt(argc, argv, "DdhiPp:Rr:l:vV")) != -1) {
 		switch (opt) {
 			case 'D':
@@ -805,6 +823,7 @@ int main(int argc, char **argv)
 						exit(EXIT_FAILURE);
 					}
 				}
+				reboot_set = 1;
 				break;
 			case 'l':
 				iface = optarg;
