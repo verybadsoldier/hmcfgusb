@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <stdint.h>
+#include <stdarg.h>
 #include <string.h>
 #include <strings.h>
 #include <poll.h>
@@ -52,6 +53,7 @@ extern char *optarg;
 static int impersonate_hmlanif = 0;
 static int debug = 0;
 static int verbose = 0;
+static FILE *logfile = NULL;
 static int reboot_seconds = 0;
 static int reboot_at_hour = -1;
 static int reboot_at_minute = -1;
@@ -87,6 +89,48 @@ static void print_timestamp(FILE *f)
 	memset(ts, 0, sizeof(ts));
 	strftime(ts, sizeof(ts)-1, "%Y-%m-%d %H:%M:%S", tmp);
 	fprintf(f, "%s.%06ld: ", ts, tv.tv_usec);
+}
+
+static void write_log(char *buf, int len, char *fmt, ...)
+{
+	va_list ap;
+	int i;
+
+	if ((!logfile) && (!verbose))
+		return;
+
+	if (logfile)
+		print_timestamp(logfile);
+	if (verbose)
+		print_timestamp(stdout);
+
+	if (fmt) {
+		if (logfile) {
+			va_start(ap, fmt);
+			vfprintf(logfile, fmt, ap);
+			va_end(ap);
+		}
+		if (verbose) {
+			va_start(ap, fmt);
+			vprintf(fmt, ap);
+			va_end(ap);
+		}
+	}
+
+	if (buf && len) {
+		for (i = 0; i < len; i++) {
+			if (logfile)
+				fprintf(logfile, "%c", buf[i]);
+			if (verbose)
+				printf("%c", buf[i]);
+		}
+		if (logfile)
+			fprintf(logfile, "\n");
+		if (verbose)
+			printf("\n");
+	}
+	if (logfile)
+		fflush(logfile);
 }
 
 static int format_part_out(uint8_t **inpos, int inlen, uint8_t **outpos, int outlen, int len, int flags)
@@ -319,15 +363,7 @@ static int hmlan_format_out(uint8_t *buf, int buf_len, void *data)
 		return 1;
 	}
 
-	if (verbose) {
-		int i;
-
-		print_timestamp(stdout);
-		printf("LAN < ");
-		for (i = 0; i < outpos-out-2; i++)
-			printf("%c", out[i]);
-		printf("\n");
-	}
+	write_log((char*)out, outpos-out-2, "LAN < ");
 
 	w = write(fd, out, outpos-out);
 	if (w <= 0) {
@@ -341,15 +377,7 @@ static int hmlan_format_out(uint8_t *buf, int buf_len, void *data)
 		struct queued_rx *last_rx;
 
 		while (curr_rx) {
-			if (verbose) {
-				int i;
-
-				print_timestamp(stdout);
-				printf("LAN < ");
-				for (i = 0; i < curr_rx->len-2; i++)
-					printf("%c", curr_rx->rx[i]);
-				printf("\n");
-			}
+			write_log(curr_rx->rx, curr_rx->len-2, "LAN < ");
 
 			w = write(fd, curr_rx->rx, curr_rx->len);
 			if (w <= 0) {
@@ -411,13 +439,7 @@ static int hmlan_parse_in(int fd, void *data)
 			if (last == 0)
 				continue;
 
-			if (verbose) {
-				print_timestamp(stdout);
-				printf("LAN > ");
-				for (i = 0; i < last; i++)
-					printf("%c", instart[i]);
-				printf("\n");
-			}
+			write_log((char*)instart, last,  "LAN > ");
 
 			memset(out, 0, sizeof(out));
 			*outpos++ = *inpos++;
@@ -717,28 +739,22 @@ static int socket_server(char *iface, int port, int flags)
 		/* FIXME: getnameinfo... */
 		client_addr = ntohl(csin.sin_addr.s_addr);
 
-		if (verbose) {
-			print_timestamp(stdout);
-			printf("Client %d.%d.%d.%d connected!\n",
-					(client_addr & 0xff000000) >> 24,
-					(client_addr & 0x00ff0000) >> 16,
-					(client_addr & 0x0000ff00) >> 8,
-					(client_addr & 0x000000ff));
-		}
+		write_log(NULL, 0, "Client %d.%d.%d.%d connected!\n",
+				(client_addr & 0xff000000) >> 24,
+				(client_addr & 0x00ff0000) >> 16,
+				(client_addr & 0x0000ff00) >> 8,
+				(client_addr & 0x000000ff));
 
 		comm(client, client, sock, flags);
 
 		shutdown(client, SHUT_RDWR);
 		close(client);
 
-		if (verbose) {
-			print_timestamp(stdout);
-			printf("Connection to %d.%d.%d.%d closed!\n",
-					(client_addr & 0xff000000) >> 24,
-					(client_addr & 0x00ff0000) >> 16,
-					(client_addr & 0x0000ff00) >> 8,
-					(client_addr & 0x000000ff));
-		}
+		write_log(NULL, 0, "Connection to %d.%d.%d.%d closed!\n",
+				(client_addr & 0xff000000) >> 24,
+				(client_addr & 0x00ff0000) >> 16,
+				(client_addr & 0x0000ff00) >> 8,
+				(client_addr & 0x000000ff));
 		sleep(1);
 	}
 
@@ -762,6 +778,7 @@ void hmlan_syntax(char *prog)
 	fprintf(stderr, "\t-h\t\tthis help\n");
 	fprintf(stderr, "\t-i\t\tinteractive mode (connect HM-CFG-USB to terminal)\n");
 	fprintf(stderr, "\t-l ip\t\tlisten on given IP address only (for example 127.0.0.1)\n");
+	fprintf(stderr, "\t-L logfile\tlog network-communication to logfile\n");
 	fprintf(stderr, "\t-P\t\tcreate PID file " PID_FILE " in daemon mode\n");
 	fprintf(stderr, "\t-p n\t\tlisten on port n (default: 1000)\n");
 	fprintf(stderr, "\t-r n\t\treboot HM-CFG-USB after n seconds (0: no reboot, default: %u if FW < 0.967, 0 otherwise)\n", DEFAULT_REBOOT_SECONDS);
@@ -780,7 +797,7 @@ int main(int argc, char **argv)
 	char *ep;
 	int opt;
 	
-	while((opt = getopt(argc, argv, "DdhiPp:Rr:l:vV")) != -1) {
+	while((opt = getopt(argc, argv, "DdhiPp:Rr:l:L:vV")) != -1) {
 		switch (opt) {
 			case 'D':
 				debug = 1;
@@ -827,6 +844,13 @@ int main(int argc, char **argv)
 				break;
 			case 'l':
 				iface = optarg;
+				break;
+			case 'L':
+				logfile = fopen(optarg, "a");
+				if (!logfile) {
+					perror("fopen(logfile)");
+					exit(EXIT_FAILURE);
+				}
 				break;
 			case 'v':
 				verbose = 1;
