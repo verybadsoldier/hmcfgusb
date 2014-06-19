@@ -1,0 +1,4 @@
+flash-hmcfgusb opt/hm/hmcfgusb
+flash-ota opt/hm/hmcfgusb
+hmland opt/hm/hmcfgusb
+hmsniff opt/hm/hmcfgusb
