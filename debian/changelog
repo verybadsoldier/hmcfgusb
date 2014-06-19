@@ -1,5 +1,5 @@
-hmcfgusb (0.096-1) unstable; urgency=low
+hmcfgusb (0.097-1) unstable; urgency=low
 
-  * Initial release (Closes: #nnnn)  <nnnn is the bug number of your ITP>
+  * Initial release
 
- -- root <jsurf@gmx.de>  Thu, 19 Jun 2014 09:42:47 +0200
+ -- JSurf <jsurf@gmx.de>  Thu, 19 Jun 2014 09:42:47 +0200
