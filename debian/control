@@ -1,12 +1,12 @@
 Source: hmcfgusb
 Section: unknown
 Priority: extra
-Maintainer: root <jsurf@gmx.de>
-Build-Depends: debhelper (>= 8.0.0)
+Maintainer: JSurf <jsurf@gmx.de>
+Build-Depends: debhelper (>= 8.0.0), libusb-1.0-0-dev
 Standards-Version: 3.9.2
-Homepage: <insert the upstream URL, if relevant>
-#Vcs-Git: git://git.debian.org/collab-maint/hmcfgusb.git
-#Vcs-Browser: http://git.debian.org/?p=collab-maint/hmcfgusb.git;a=summary
+Homepage: http://git.zerfleddert.de/cgi-bin/gitweb.cgi/hmcfgusb
+#Vcs-Git: https://github.com/JSUrf/hmcfgusb.git
+#Vcs-Browser: https://github.com/JSurf/hmcfgusb
 
 Package: hmcfgusb
 Architecture: any
