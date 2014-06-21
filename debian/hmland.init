@@ -18,7 +18,7 @@ PATH=/sbin:/usr/sbin:/bin:/usr/bin
 DESC="Homematic LAN Adapter service" # Introduce a short description here
 NAME=hmland             # Introduce the short server's name here
 DAEMON=/opt/hm/hmcfgusb/$NAME # Introduce the server's location here
-DAEMON_ARGS="-r 03:30 -d -P -p 1000"             # Arguments to run the daemon with
+DAEMON_ARGS="-r 03:30 -d -P -p 1000 -L /var/log/hmland.log"             # Arguments to run the daemon with
 PIDFILE=/var/run/$NAME.pid
 SCRIPTNAME=/etc/init.d/$NAME
 
