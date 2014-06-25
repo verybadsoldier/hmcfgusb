@@ -14,3 +14,5 @@
 
 override_dh_installinit:
 	dh_installinit --name=hmland
+override_dh_installlogrotate:
+	dh_installlogrotate --name=hmland
