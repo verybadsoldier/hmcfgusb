@@ -58,6 +58,10 @@
 
 static int quit = 0;
 static int debug = 0;
+static struct libusb_context *libusb_ctx = NULL;
+#ifdef WIN32
+static pthread_t event_thread;
+#endif
 static int libusb_initialized = 0;
 
 /* Not in all libusb-1.0 versions, so we have to roll our own :-( */
@@ -129,6 +133,7 @@ static libusb_device_handle *hmcfgusb_find(int vid, int pid, char *serial) {
 				return NULL;
 			}
 
+#ifndef WIN32
 			if (serial) {
 				if (desc.iSerialNumber > 0) {
 					uint8_t devSerial[256];
@@ -156,6 +161,7 @@ static libusb_device_handle *hmcfgusb_find(int vid, int pid, char *serial) {
 				libusb_free_device_list(list, 1);
 				return NULL;
 			}
+#endif
 
 			err = libusb_claim_interface(devh, INTERFACE);
 			if ((err != 0)) {
@@ -316,6 +322,25 @@ out:
 	}
 }
 
+#ifdef WIN32
+void *hmcfgusb_event_thread(void *ctx)
+{
+	while (!quit)
+		libusb_handle_events(ctx);
+	return NULL;
+}
+
+void hmcfgusb_create_event_thread(libusb_context *ctx)
+{
+	pthread_create(&event_thread, NULL, (void *) &hmcfgusb_event_thread, (void *)ctx);
+}
+
+void hmcfgusb_join_event_thread()
+{
+	pthread_join(event_thread);
+}
+#endif
+
 struct hmcfgusb_dev *hmcfgusb_init(hmcfgusb_cb_fn cb, void *data, char *serial)
 {
 	libusb_device_handle *devh = NULL;
@@ -327,11 +352,15 @@ struct hmcfgusb_dev *hmcfgusb_init(hmcfgusb_cb_fn cb, void *data, char *serial)
 	int i;
 
 	if (!libusb_initialized) {
-		err = libusb_init(NULL);
+		err = libusb_init(&libusb_ctx);
 		if (err != 0) {
 			fprintf(stderr, "Can't initialize libusb: %s\n", usb_strerror(err));
 			return NULL;
 		}
+	
+#ifdef WIN32
+	hmcfgusb_create_event_thread(libusb_ctx);
+#endif
 	}
 	libusb_initialized = 1;
 
@@ -345,7 +374,7 @@ struct hmcfgusb_dev *hmcfgusb_init(hmcfgusb_cb_fn cb, void *data, char *serial)
 				fprintf(stderr, "Can't find/open HM-CFG-USB!\n");
 			}
 #ifdef NEED_LIBUSB_EXIT
-			hmcfgusb_exit();
+			hmcfgusb_exit(libusb_ctx);
 #endif
 			return NULL;
 		}
@@ -357,7 +386,7 @@ struct hmcfgusb_dev *hmcfgusb_init(hmcfgusb_cb_fn cb, void *data, char *serial)
 		perror("Can't allocate memory for hmcfgusb_dev");
 		libusb_close(devh);
 #ifdef NEED_LIBUSB_EXIT
-		hmcfgusb_exit();
+		hmcfgusb_exit(libusb_ctx);
 #endif
 		return NULL;
 	}
@@ -373,7 +402,7 @@ struct hmcfgusb_dev *hmcfgusb_init(hmcfgusb_cb_fn cb, void *data, char *serial)
 		free(dev);
 		libusb_close(devh);
 #ifdef NEED_LIBUSB_EXIT
-		hmcfgusb_exit();
+		hmcfgusb_exit(libusb_ctx);
 #endif
 		return NULL;
 	}
@@ -392,11 +421,12 @@ struct hmcfgusb_dev *hmcfgusb_init(hmcfgusb_cb_fn cb, void *data, char *serial)
 		free(cb_data);
 		libusb_close(devh);
 #ifdef NEED_LIBUSB_EXIT
-		hmcfgusb_exit();
+		hmcfgusb_exit(libusb_ctx);
 #endif
 		return NULL;
 	}
 
+#ifndef WIN32
 	usb_pfd = libusb_get_pollfds(NULL);
 	if (!usb_pfd) {
 		fprintf(stderr, "Can't get FDset from libusb!\n");
@@ -406,7 +436,7 @@ struct hmcfgusb_dev *hmcfgusb_init(hmcfgusb_cb_fn cb, void *data, char *serial)
 		free(cb_data);
 		libusb_close(devh);
 #ifdef NEED_LIBUSB_EXIT
-		hmcfgusb_exit();
+		hmcfgusb_exit(libusb_ctx);
 #endif
 		return NULL;
 	}
@@ -424,7 +454,7 @@ struct hmcfgusb_dev *hmcfgusb_init(hmcfgusb_cb_fn cb, void *data, char *serial)
 		free(cb_data);
 		libusb_close(devh);
 #ifdef NEED_LIBUSB_EXIT
-		hmcfgusb_exit();
+		hmcfgusb_exit(libusb_ctx);
 #endif
 		return NULL;
 	}
@@ -440,6 +470,7 @@ struct hmcfgusb_dev *hmcfgusb_init(hmcfgusb_cb_fn cb, void *data, char *serial)
 	free(usb_pfd);
 
 	dev->n_pfd = dev->n_usb_pfd;
+#endif
 
 	quit = 0;
 
@@ -597,7 +628,11 @@ void hmcfgusb_close(struct hmcfgusb_dev *dev)
 void hmcfgusb_exit(void)
 {
 	if (libusb_initialized) {
-		libusb_exit(NULL);
+		libusb_exit(libusb_ctx);
+#ifdef WIN32
+	hmcfgusb_join_event_thread();
+#endif
+
 		libusb_initialized = 0;
 	}
 }
