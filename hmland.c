@@ -54,8 +54,6 @@
 #define LAN_MAX_LINE_LENGTH	4096
 #define LAN_MAX_BUF_LENGTH	1048576
 
-extern char *optarg;
-
 static int impersonate_hmlanif = 0;
 static int debug = 0;
 static int verbose = 0;

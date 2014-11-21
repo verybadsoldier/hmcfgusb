@@ -48,8 +48,6 @@
 #define NORMAL_MAX_PAYLOAD	37
 #define LOWER_MAX_PAYLOAD	17
 
-extern char *optarg;
-
 uint32_t hmid = 0;
 uint32_t my_hmid = 0;
 uint8_t key[16] = {0};
