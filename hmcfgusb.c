@@ -285,8 +285,11 @@ static void LIBUSB_CALL hmcfgusb_interrupt(struct libusb_transfer *transfer)
 	if (err != 0) {
 		fprintf(stderr, "Can't re-submit transfer: %s\n", usb_strerror(err));
 		libusb_free_transfer(transfer);
-		cb_data->dev->transfer = NULL;
-		free(cb_data);
+		if (cb_data) {
+			if (cb_data->dev)
+				cb_data->dev->transfer = NULL;
+			free(cb_data);
+		}
 	}
 }
 
