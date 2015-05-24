@@ -401,7 +401,7 @@ static int hmlan_format_out(uint8_t *buf, int buf_len, void *data)
 static int hmlan_parse_in(int fd, void *data)
 {
 	struct hmcfgusb_dev *dev = data;
-	uint8_t buf[1025];
+	uint8_t buf[131073];
 	uint8_t out[0x40]; //FIXME!!!
 	uint8_t *outpos;
 	uint8_t *inpos;
