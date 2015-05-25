@@ -1,6 +1,6 @@
 /* HM-CFG-LAN emulation for HM-CFG-USB
  *
- * Copyright (c) 2013 Michael Gernoth <michael@gernoth.net>
+ * Copyright (c) 2013-15 Michael Gernoth <michael@gernoth.net>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -47,6 +47,10 @@
 #define PID_FILE "/var/run/hmland.pid"
 
 #define DEFAULT_REBOOT_SECONDS	86400
+#define LAN_READ_CHUNK_SIZE	2048
+/* Don't allow remote clients to consume all of our memory */
+#define LAN_MAX_LINE_LENGTH	4096
+#define LAN_MAX_BUF_LENGTH	1048576
 
 extern char *optarg;
 
@@ -58,6 +62,8 @@ static int reboot_seconds = 0;
 static int reboot_at_hour = -1;
 static int reboot_at_minute = -1;
 static int reboot_set = 0;
+static uint8_t *lan_read_buf = NULL;
+static int lan_read_buflen = 0;
 
 struct queued_rx {
 	char *rx;
@@ -398,72 +404,93 @@ static int hmlan_format_out(uint8_t *buf, int buf_len, void *data)
 	return 1;
 }
 
-static int hmlan_parse_in(int fd, void *data)
+static int hmlan_parse_one(uint8_t *cmd, int last, void *data)
 {
 	struct hmcfgusb_dev *dev = data;
-	uint8_t buf[131073];
 	uint8_t out[0x40]; //FIXME!!!
 	uint8_t *outpos;
-	uint8_t *inpos;
-	int i;
-	int last;
+	uint8_t *inpos = cmd;
+
+	outpos = out;
+
+	if (last == 0)
+		return 1;
+
+	write_log((char*)cmd, last,  "LAN > ");
+
+	memset(out, 0, sizeof(out));
+	*outpos++ = *inpos++;
+
+	switch(*cmd) {
+		case 'S':
+			parse_part_in(&inpos, (last-(inpos-cmd)), &outpos, (sizeof(out)-(outpos-out)), 0);
+			parse_part_in(&inpos, (last-(inpos-cmd)), &outpos, (sizeof(out)-(outpos-out)), 0);
+			parse_part_in(&inpos, (last-(inpos-cmd)), &outpos, (sizeof(out)-(outpos-out)), 0);
+			parse_part_in(&inpos, (last-(inpos-cmd)), &outpos, (sizeof(out)-(outpos-out)), 0);
+			parse_part_in(&inpos, (last-(inpos-cmd)), &outpos, (sizeof(out)-(outpos-out)), 0);
+			parse_part_in(&inpos, (last-(inpos-cmd)), &outpos, (sizeof(out)-(outpos-out)), FLAG_LENGTH_BYTE);
+			break;
+		case 'Y':
+			parse_part_in(&inpos, (last-(inpos-cmd)), &outpos, (sizeof(out)-(outpos-out)), 0);
+			parse_part_in(&inpos, (last-(inpos-cmd)), &outpos, (sizeof(out)-(outpos-out)), 0);
+			parse_part_in(&inpos, (last-(inpos-cmd)), &outpos, (sizeof(out)-(outpos-out)), FLAG_LENGTH_BYTE);
+			break;
+		default:
+			parse_part_in(&inpos, (last-(inpos-cmd)), &outpos, (sizeof(out)-(outpos-out)), FLAG_IGNORE_COMMAS);
+			break;
+	}
+
+	hmcfgusb_send(dev, out, sizeof(out), 1);
+
+	return 1;
+}
+
+static int hmlan_parse_in(int fd, void *data)
+{
+	uint8_t *newbuf;
 	int r;
+	int i;
 
-	memset(buf, 0, sizeof(buf));
-
-	r = read(fd, buf, sizeof(buf)-1);
+	newbuf = realloc(lan_read_buf, lan_read_buflen + LAN_READ_CHUNK_SIZE);
+	if (!newbuf) {
+		perror("realloc");
+		return 0;
+	}
+	lan_read_buf = newbuf;
+	r = read(fd, lan_read_buf + lan_read_buflen, LAN_READ_CHUNK_SIZE);
 	if (r > 0) {
-		uint8_t *inend = buf + r;
+		lan_read_buflen += r;
+		if (lan_read_buflen > LAN_MAX_BUF_LENGTH) {
+			if (verbose)
+				printf("Our buffer is bigger than %d bytes (%d bytes), closing connection!\n", LAN_MAX_BUF_LENGTH, lan_read_buflen);
+			return -1;
+		}
+		while(lan_read_buflen > 0) {
+			int found = 0;
 
-		inpos = buf;
-
-		while (inpos < inend) {
-			uint8_t *instart = inpos;
-
-			if ((*inpos == '\r') || (*inpos == '\n')) {
-				inpos++;
-				continue;
-			}
-			
-			outpos = out;
-
-			last = inend - inpos;
-
-			for (i = 0; i < last; i++) {
-				if ((inpos[i] == '\r') || (inpos[i] == '\n')) {
-					last = i;
+			for (i = 0; i < lan_read_buflen; i++) {
+				if ((lan_read_buf[i] == '\r') || (lan_read_buf[i] == '\n')) {
+					if (i > 0)
+						hmlan_parse_one(lan_read_buf, i, data);
+					memmove(lan_read_buf, lan_read_buf + i + 1, lan_read_buflen - (i + 1));
+					lan_read_buflen -= (i + 1);
+					found = 1;
 					break;
 				}
+				if (i > LAN_MAX_LINE_LENGTH) {
+					if (verbose)
+						printf("Client sent more than %d bytes without newline, closing connection!\n", LAN_MAX_LINE_LENGTH);
+					return -1;
+				}
 			}
-
-			if (last == 0)
-				continue;
-
-			write_log((char*)instart, last,  "LAN > ");
-
-			memset(out, 0, sizeof(out));
-			*outpos++ = *inpos++;
-
-			switch(*instart) {
-				case 'S':
-					parse_part_in(&inpos, (last-(inpos-instart)), &outpos, (sizeof(out)-(outpos-out)), 0);
-					parse_part_in(&inpos, (last-(inpos-instart)), &outpos, (sizeof(out)-(outpos-out)), 0);
-					parse_part_in(&inpos, (last-(inpos-instart)), &outpos, (sizeof(out)-(outpos-out)), 0);
-					parse_part_in(&inpos, (last-(inpos-instart)), &outpos, (sizeof(out)-(outpos-out)), 0);
-					parse_part_in(&inpos, (last-(inpos-instart)), &outpos, (sizeof(out)-(outpos-out)), 0);
-					parse_part_in(&inpos, (last-(inpos-instart)), &outpos, (sizeof(out)-(outpos-out)), FLAG_LENGTH_BYTE);
-					break;
-				case 'Y':
-					parse_part_in(&inpos, (last-(inpos-instart)), &outpos, (sizeof(out)-(outpos-out)), 0);
-					parse_part_in(&inpos, (last-(inpos-instart)), &outpos, (sizeof(out)-(outpos-out)), 0);
-					parse_part_in(&inpos, (last-(inpos-instart)), &outpos, (sizeof(out)-(outpos-out)), FLAG_LENGTH_BYTE);
-					break;
-				default:
-					parse_part_in(&inpos, (last-(inpos-instart)), &outpos, (sizeof(out)-(outpos-out)), FLAG_IGNORE_COMMAS);
-					break;
+			if (!found)
+				break;
+			newbuf = realloc(lan_read_buf, lan_read_buflen);
+			if (lan_read_buflen && !newbuf) {
+				perror("realloc");
+				return 0;
 			}
-
-			hmcfgusb_send(dev, out, sizeof(out), 1);
+			lan_read_buf = newbuf;
 		}
 	} else if (r < 0) {
 		if (errno != ECONNRESET)
@@ -749,6 +776,11 @@ static int socket_server(char *iface, int port, int flags)
 
 		shutdown(client, SHUT_RDWR);
 		close(client);
+
+		if (lan_read_buf)
+			free(lan_read_buf);
+		lan_read_buf = NULL;
+		lan_read_buflen = 0;
 
 		write_log(NULL, 0, "Connection to %d.%d.%d.%d closed!\n",
 				(client_addr & 0xff000000) >> 24,
