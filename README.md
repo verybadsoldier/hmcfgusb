@@ -1,6 +1,6 @@
 This repository contains utilities to use the [HM-CFG-USB(2)](http://www.elv.de/homematic-usb-konfigurations-adapter-1.html) (HomeMatic USB Konfigurations-Adapter) from [ELV](http://www.elv.de/) on Linux/Unix by using [libusb 1.0](http://www.libusb.org/).
 
-The HM-CFG-USB can be used to send and receive [BidCoS-Packets](https://sathya.de/HMCWiki/index.php/BidCoS_Packets) to control [HomeMatic](http://www.homematic.com/) home automation devices (like remote controllable sockets, switches, sensors, ...).
+The HM-CFG-USB can be used to send and receive [BidCoS-Packets](http://homegear.eu/index.php/BidCoS%C2%AE_Packets) to control [HomeMatic](http://www.homematic.com/) home automation devices (like remote controllable sockets, switches, sensors, ...).
 
 This repository contains, amongst others, an application, which emulates the HomeMatic LAN configuration adapter-protocol to make it possible to use the HM-CFG-USB in [Fhem](http://fhem.de/) or as a lan configuration tool for the CCU or the HomeMatic windows configuration software, also supporting devices using AES-signing like [KeyMatic](http://www.elv.de/homematic-funk-tuerschlossantrieb-keymatic-silber-inkl-funk-handsender.html).
 
