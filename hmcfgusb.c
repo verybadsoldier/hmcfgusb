@@ -262,15 +262,7 @@ static void LIBUSB_CALL hmcfgusb_interrupt(struct libusb_transfer *transfer)
 				fprintf(stderr, "Interrupt transfer not completed: %s!\n", usb_strerror(transfer->status));
 
 			quit = EIO;
-
-			libusb_free_transfer(transfer);
-			if (cb_data) {
-				if (cb_data->dev && cb_data->dev->transfer) {
-					cb_data->dev->transfer = NULL;
-				}
-				free(cb_data);
-			}
-			return;
+			goto out;
 		}
 	} else {
 		if (cb_data && cb_data->cb) {
@@ -279,14 +271,7 @@ static void LIBUSB_CALL hmcfgusb_interrupt(struct libusb_transfer *transfer)
 
 			if (!cb_data->cb(transfer->buffer, transfer->actual_length, cb_data->data)) {
 				quit = EIO;
-
-				libusb_free_transfer(transfer);
-				if (cb_data && cb_data->dev && cb_data->dev->transfer) {
-					cb_data->dev->transfer = NULL;
-					free(cb_data);
-				}
-
-				return;
+				goto out;
 			}
 		} else {
 			hexdump(transfer->buffer, transfer->actual_length, "> ");
@@ -296,12 +281,18 @@ static void LIBUSB_CALL hmcfgusb_interrupt(struct libusb_transfer *transfer)
 	err = libusb_submit_transfer(transfer);
 	if (err != 0) {
 		fprintf(stderr, "Can't re-submit transfer: %s\n", usb_strerror(err));
-		libusb_free_transfer(transfer);
-		if (cb_data) {
-			if (cb_data->dev)
-				cb_data->dev->transfer = NULL;
-			free(cb_data);
+		goto out;
+	}
+
+	return;
+
+out:
+	libusb_free_transfer(transfer);
+	if (cb_data) {
+		if (cb_data->dev && cb_data->dev->transfer) {
+			cb_data->dev->transfer = NULL;
 		}
+		free(cb_data);
 	}
 }
 
