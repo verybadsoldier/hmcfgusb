@@ -56,7 +56,7 @@ AES-signing like [KeyMatic][].
 
 [hmusbif.03c7.enc]: https://git.zerfleddert.de/hmcfgusb/firmware/hmusbif.03c7.enc
 
-### Updating HomemMatic devices over the air (OTA): ###
+### Updating HomemMatic devices over the air (OTA) (also for CUL devices): ###
 
 1.  Compile the hmcfgusb utilities like in the hmland HowTo above
     (steps 1 to 5) and stay in the directory
@@ -64,8 +64,8 @@ AES-signing like [KeyMatic][].
     firmware version 1.4
 3.  Extract the tgz-file: `tar xvzf hm_cc_rt_dn_update_V1_4_001_141020.tgz`
 4.  Make sure that hmland is not running
-*   When using the **HM-CFG-USB**, flash the new firmware to the device with
-    serial *KEQ0123456*:  
+*   When using the **[HM-CFG-USB(2)][]**, flash the new firmware to the device
+    with serial *KEQ0123456*:  
      `./flash-ota -f hm_cc_rt_dn_update_V1_4_001_141020.eq3 -s KEQ0123456`
 *   When using a **[culfw][]**-based device (**[CUL][]/[COC][]/...**), flash
     the new firmware to the device with serial *KEQ0123456*:  
