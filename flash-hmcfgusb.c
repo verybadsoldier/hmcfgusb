@@ -93,11 +93,12 @@ int main(int argc, char **argv)
 
 	if (!dev->bootloader) {
 		fprintf(stderr, "\nHM-CFG-USB not in bootloader mode, entering bootloader.\n");
-		hmcfgusb_enter_bootloader(dev);
 		fprintf(stderr, "\nWaiting for device to reappear...\n");
 
 		do {
 			if (dev) {
+				if (!dev->bootloader)
+					hmcfgusb_enter_bootloader(dev);
 				hmcfgusb_close(dev);
 			}
 			sleep(1);
@@ -165,6 +166,7 @@ int main(int argc, char **argv)
 	firmware_free(fw);
 
 	hmcfgusb_close(dev);
+	hmcfgusb_exit();
 
 	return EXIT_SUCCESS;
 }

@@ -221,5 +221,7 @@ int main(int argc, char **argv)
 		hmcfgusb_close(dev);
 	} while (!quit);
 
+	hmcfgusb_exit();
+
 	return EXIT_SUCCESS;
 }

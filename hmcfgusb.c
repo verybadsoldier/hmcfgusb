@@ -58,6 +58,7 @@
 
 static int quit = 0;
 static int debug = 0;
+static int libusb_initialized = 0;
 
 /* Not in all libusb-1.0 versions, so we have to roll our own :-( */
 static char * usb_strerror(int e)
@@ -124,26 +125,33 @@ static libusb_device_handle *hmcfgusb_find(int vid, int pid) {
 			err = libusb_open(dev, &devh);
 			if (err) {
 				fprintf(stderr, "Can't open device: %s\n", usb_strerror(err));
+				libusb_free_device_list(list, 1);
 				return NULL;
 			}
 
 			err = libusb_detach_kernel_driver(devh, INTERFACE);
 			if ((err != 0) && (err != LIBUSB_ERROR_NOT_FOUND)) {
 				fprintf(stderr, "Can't detach kernel driver: %s\n", usb_strerror(err));
+				libusb_close(devh);
+				libusb_free_device_list(list, 1);
 				return NULL;
 			}
 
 			err = libusb_claim_interface(devh, INTERFACE);
 			if ((err != 0)) {
 				fprintf(stderr, "Can't claim interface: %s\n", usb_strerror(err));
+				libusb_close(devh);
+				libusb_free_device_list(list, 1);
 				return NULL;
 			}
 
+			libusb_free_device_list(list, 0);
 			return devh;
 		}
 
 	}
 
+	libusb_free_device_list(list, 1);
 	return NULL;
 }
 
@@ -250,12 +258,16 @@ static void LIBUSB_CALL hmcfgusb_interrupt(struct libusb_transfer *transfer)
 
 	if (transfer->status != LIBUSB_TRANSFER_COMPLETED) {
 		if (transfer->status != LIBUSB_TRANSFER_TIMED_OUT) {
-			fprintf(stderr, "Interrupt transfer not completed: %s!\n", usb_strerror(transfer->status));
+			if (transfer->status != LIBUSB_TRANSFER_CANCELLED)
+				fprintf(stderr, "Interrupt transfer not completed: %s!\n", usb_strerror(transfer->status));
+
 			quit = EIO;
 
-			if (cb_data && cb_data->dev && cb_data->dev->transfer) {
-				libusb_free_transfer(cb_data->dev->transfer);
-				cb_data->dev->transfer = NULL;
+			libusb_free_transfer(transfer);
+			if (cb_data) {
+				if (cb_data->dev && cb_data->dev->transfer) {
+					cb_data->dev->transfer = NULL;
+				}
 				free(cb_data);
 			}
 			return;
@@ -268,8 +280,8 @@ static void LIBUSB_CALL hmcfgusb_interrupt(struct libusb_transfer *transfer)
 			if (!cb_data->cb(transfer->buffer, transfer->actual_length, cb_data->data)) {
 				quit = EIO;
 
+				libusb_free_transfer(transfer);
 				if (cb_data && cb_data->dev && cb_data->dev->transfer) {
-					libusb_free_transfer(cb_data->dev->transfer);
 					cb_data->dev->transfer = NULL;
 					free(cb_data);
 				}
@@ -303,18 +315,23 @@ struct hmcfgusb_dev *hmcfgusb_init(hmcfgusb_cb_fn cb, void *data)
 	int err;
 	int i;
 
-	err = libusb_init(NULL);
-	if (err != 0) {
-		fprintf(stderr, "Can't initialize libusb: %s\n", usb_strerror(err));
-		return NULL;
+	if (!libusb_initialized) {
+		err = libusb_init(NULL);
+		if (err != 0) {
+			fprintf(stderr, "Can't initialize libusb: %s\n", usb_strerror(err));
+			return NULL;
+		}
 	}
+	libusb_initialized = 1;
 
 	devh = hmcfgusb_find(ID_VENDOR, ID_PRODUCT);
 	if (!devh) {
 		devh = hmcfgusb_find(ID_VENDOR, ID_PRODUCT_BL);
 		if (!devh) {
 			fprintf(stderr, "Can't find/open hmcfgusb!\n");
-			libusb_exit(NULL);
+#ifdef NEED_LIBUSB_EXIT
+			hmcfgusb_exit();
+#endif
 			return NULL;
 		}
 		bootloader = 1;
@@ -324,7 +341,9 @@ struct hmcfgusb_dev *hmcfgusb_init(hmcfgusb_cb_fn cb, void *data)
 	if (!dev) {
 		perror("Can't allocate memory for hmcfgusb_dev");
 		libusb_close(devh);
-		libusb_exit(NULL);
+#ifdef NEED_LIBUSB_EXIT
+		hmcfgusb_exit();
+#endif
 		return NULL;
 	}
 
@@ -338,7 +357,9 @@ struct hmcfgusb_dev *hmcfgusb_init(hmcfgusb_cb_fn cb, void *data)
 		perror("Can't allocate memory for hmcfgusb_cb_data");
 		free(dev);
 		libusb_close(devh);
-		libusb_exit(NULL);
+#ifdef NEED_LIBUSB_EXIT
+		hmcfgusb_exit();
+#endif
 		return NULL;
 	}
 
@@ -355,17 +376,23 @@ struct hmcfgusb_dev *hmcfgusb_init(hmcfgusb_cb_fn cb, void *data)
 		free(dev);
 		free(cb_data);
 		libusb_close(devh);
-		libusb_exit(NULL);
+#ifdef NEED_LIBUSB_EXIT
+		hmcfgusb_exit();
+#endif
 		return NULL;
 	}
 
 	usb_pfd = libusb_get_pollfds(NULL);
 	if (!usb_pfd) {
 		fprintf(stderr, "Can't get FDset from libusb!\n");
+		libusb_cancel_transfer(dev->transfer);
+		libusb_handle_events(NULL);
 		free(dev);
 		free(cb_data);
 		libusb_close(devh);
-		libusb_exit(NULL);
+#ifdef NEED_LIBUSB_EXIT
+		hmcfgusb_exit();
+#endif
 		return NULL;
 	}
 
@@ -376,10 +403,14 @@ struct hmcfgusb_dev *hmcfgusb_init(hmcfgusb_cb_fn cb, void *data)
 	dev->pfd = malloc(dev->n_usb_pfd * sizeof(struct pollfd));
 	if (!dev->pfd) {
 		perror("Can't allocate memory for poll-fds");
+		libusb_cancel_transfer(dev->transfer);
+		libusb_handle_events(NULL);
 		free(dev);
 		free(cb_data);
 		libusb_close(devh);
-		libusb_exit(NULL);
+#ifdef NEED_LIBUSB_EXIT
+		hmcfgusb_exit();
+#endif
 		return NULL;
 	}
 
@@ -532,6 +563,7 @@ void hmcfgusb_close(struct hmcfgusb_dev *dev)
 
 	if (dev->transfer) {
 		libusb_cancel_transfer(dev->transfer);
+		libusb_handle_events(NULL);
 	}
 
 	err = libusb_release_interface(dev->usb_devh, INTERFACE);
@@ -540,10 +572,19 @@ void hmcfgusb_close(struct hmcfgusb_dev *dev)
 	}
 
 	libusb_close(dev->usb_devh);
+#ifdef NEED_LIBUSB_EXIT
+	hmcfgusb_exit();
+#endif
 	free(dev->pfd);
 	free(dev);
+}
 
-	libusb_exit(NULL);
+void hmcfgusb_exit(void)
+{
+	if (libusb_initialized) {
+		libusb_exit(NULL);
+		libusb_initialized = 0;
+	}
 }
 
 void hmcfgusb_set_debug(int d)

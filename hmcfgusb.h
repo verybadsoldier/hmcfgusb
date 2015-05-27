@@ -41,4 +41,5 @@ int hmcfgusb_poll(struct hmcfgusb_dev *dev, int timeout);
 void hmcfgusb_enter_bootloader(struct hmcfgusb_dev *dev);
 void hmcfgusb_leave_bootloader(struct hmcfgusb_dev *dev);
 void hmcfgusb_close(struct hmcfgusb_dev *dev);
+void hmcfgusb_exit(void);
 void hmcfgusb_set_debug(int d);

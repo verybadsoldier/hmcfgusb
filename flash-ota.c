@@ -453,11 +453,12 @@ int main(int argc, char **argv)
 
 		if (!dev.hmcfgusb->bootloader) {
 			printf("HM-CFG-USB not in bootloader mode, entering bootloader.\n");
-			hmcfgusb_enter_bootloader(dev.hmcfgusb);
 			printf("Waiting for device to reappear...\n");
 
 			do {
 				if (dev.hmcfgusb) {
+					if (!dev.hmcfgusb->bootloader)
+						hmcfgusb_enter_bootloader(dev.hmcfgusb);
 					hmcfgusb_close(dev.hmcfgusb);
 				}
 				sleep(1);
@@ -466,10 +467,11 @@ int main(int argc, char **argv)
 
 		if (dev.hmcfgusb->bootloader) {
 			printf("HM-CFG-USB in bootloader mode, rebooting\n");
-			hmcfgusb_leave_bootloader(dev.hmcfgusb);
 
 			do {
 				if (dev.hmcfgusb) {
+					if (dev.hmcfgusb->bootloader)
+						hmcfgusb_leave_bootloader(dev.hmcfgusb);
 					hmcfgusb_close(dev.hmcfgusb);
 				}
 				sleep(1);
@@ -736,6 +738,7 @@ int main(int argc, char **argv)
 	switch(dev.type) {
 		case DEVICE_TYPE_HMCFGUSB:
 			hmcfgusb_close(dev.hmcfgusb);
+			hmcfgusb_exit();
 			break;
 		case DEVICE_TYPE_CULFW:
 			culfw_close(dev.culfw);
