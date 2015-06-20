@@ -619,6 +619,13 @@ void hmcfgusb_close(struct hmcfgusb_dev *dev)
 		libusb_handle_events(NULL);
 	}
 
+#ifdef WIN32
+	int perr = hmcfgusb_join_event_thread();
+	if (perr != 0) {
+		fprintf(stderr, "pthread_join event thread failed: %d\n", perr);
+	}
+#endif
+
 	err = libusb_release_interface(dev->usb_devh, HMCFGUSB_INTERFACE);
 	if ((err != 0)) {
 		fprintf(stderr, "Can't release interface: %s\n", usb_strerror(err));
@@ -636,13 +643,6 @@ void hmcfgusb_exit(void)
 {
 	if (libusb_initialized) {
 		libusb_exit(libusb_ctx);
-#ifdef WIN32
-	int perr = hmcfgusb_join_event_thread();
-  if (perr != 0) {
-		fprintf(stderr, "pthread_join event thread failed: %d\n", perr);
-  }
-#endif
-
 		libusb_initialized = 0;
 	}
 }
