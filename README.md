@@ -24,10 +24,15 @@ AES-signing like [KeyMatic][].
 1.  Install prerequisites:
     `apt-get install libusb-1.0-0-dev build-essential git`
 2.  Get the current version of this software (choose **one** option):
-    *   Get the current version via git (can be easily updated with `git pull`):
+    *   Get the current *release*-version as a .tar.gz:
+        1.  Download the latest version from the [releases-directory][].
+            Version 0.100 is used as an example for the following commands.
+        2.  Extract the archive: `tar xzf hmcfgusb-0.100.tar.gz`
+        3.  Change into the new directory: `cd hmcfgusb-0.100`
+    *   Get the current *development*-version via git (can be easily updated with `git pull`):
         1.  `git clone git://git.zerfleddert.de/hmcfgusb`
         2.  Change into the new directory: `cd hmcfgusb`
-    *   Get the current version as an archive:
+    *   Get the current *development*-version as an archive:
         1.  [hmcfgusb-HEAD-xxxxxxx.tar.gz][] (xxxxxxx is part of the commit-id.
 	    xxxxxxx is just a placeholder for this HowTo, use your value)
         2.  Extract the archive: `tar xzf hmcfgusb-HEAD-xxxxxxx.tar.gz`
@@ -42,7 +47,23 @@ AES-signing like [KeyMatic][].
     ``define hmusb HMLAN 127.0.0.1:1234``  
     ``attr hmusb hmId <hmId>``
 
+**Important compatibility information:**
+If older Fhem-versions (before 2015-06-19) or other software ([Homegear][],
+[LXCCU][], a real [CCU][], Windows configuration software, ...) is used
+to connect to hmland, the `-I` switch might be needed to impersonate a
+LAN-interface (this replaces the identity string HM-USB-IF with HM-LAN-IF).
+Software which needs this will not keep a stable connection open to
+hmland without this switch. It was the hardcoded default in versions
+< 0.100.
+
+This incompatibility is needed so connecting software is able to
+differentiate between HM-CFG-LAN and HM-CFG-USB.
+
+[releases-directory]: https://git.zerfleddert.de/hmcfgusb/releases/
 [hmcfgusb-HEAD-xxxxxxx.tar.gz]: https://git.zerfleddert.de/cgi-bin/gitweb.cgi/hmcfgusb/snapshot/HEAD.tar.gz
+[Homegear]: https://www.homegear.eu/
+[LXCCU]: http://www.lxccu.com/
+[CCU]: http://www.elv.de/homematic-zentrale-ccu-2.html
 
 ### Updating the HM-CFG-USB firmware to version 0.967: ###
 
