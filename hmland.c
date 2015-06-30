@@ -718,8 +718,6 @@ static int socket_server(char *iface, int port, int flags)
 		exit(EXIT_FAILURE);
 	}
 
-	impersonate_hmlanif = 1;
-
 	sock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if (sock == -1) {
 		perror("Can't open socket");
@@ -813,6 +811,7 @@ void hmlan_syntax(char *prog)
 	fprintf(stderr, "\t-D\t\tdebug mode\n");
 	fprintf(stderr, "\t-d\t\tdaemon mode\n");
 	fprintf(stderr, "\t-h\t\tthis help\n");
+	fprintf(stderr, "\t-I\t\tpretend to be HM-LAN-IF for compatibility with client-software (previous default)\n");
 	fprintf(stderr, "\t-i\t\tinteractive mode (connect HM-CFG-USB to terminal)\n");
 	fprintf(stderr, "\t-l ip\t\tlisten on given IP address only (for example 127.0.0.1)\n");
 	fprintf(stderr, "\t-L logfile\tlog network-communication to logfile\n");
@@ -834,7 +833,7 @@ int main(int argc, char **argv)
 	char *ep;
 	int opt;
 	
-	while((opt = getopt(argc, argv, "DdhiPp:Rr:l:L:vV")) != -1) {
+	while((opt = getopt(argc, argv, "DdhIiPp:Rr:l:L:vV")) != -1) {
 		switch (opt) {
 			case 'D':
 				debug = 1;
@@ -842,6 +841,9 @@ int main(int argc, char **argv)
 				break;
 			case 'd':
 				flags |= FLAG_DAEMON;
+				break;
+			case 'I':
+				impersonate_hmlanif = 1;
 				break;
 			case 'i':
 				interactive = 1;
@@ -894,7 +896,7 @@ int main(int argc, char **argv)
 				break;
 			case 'V':
 				printf("hmland " VERSION "\n");
-				printf("Copyright (c) 2013 Michael Gernoth\n\n");
+				printf("Copyright (c) 2013-15 Michael Gernoth\n\n");
 				exit(EXIT_SUCCESS);
 			case 'h':
 			case ':':
