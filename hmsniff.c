@@ -125,7 +125,7 @@ static void dissect_hm(uint8_t *buf, int len)
 	if (buf[2] & (1 << 7)) printf("RPTEN ");
 	printf("\n");
 	printf("\tMessage type: %s (0x%02x)\n", hm_message_types(buf[3]), buf[3]);
-	printf("\tMesage: ");
+	printf("\tMessage: ");
 	for (i = 10; i < len; i++) {
 		printf("%02X", buf[i]);
 	}
