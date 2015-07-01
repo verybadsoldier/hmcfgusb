@@ -48,10 +48,11 @@ AES-signing like [KeyMatic][].
     ``attr hmusb hmId <hmId>``
 
 **Important compatibility information:**
-If older Fhem-versions (before 2015-06-19) or other software ([Homegear][],
-[LXCCU][], a real [CCU][], Windows configuration software, ...) is used
-to connect to hmland, the `-I` switch might be needed to impersonate a
-LAN-interface (this replaces the identity string HM-USB-IF with HM-LAN-IF).
+If older Fhem-versions (before 2015-06-19) or other software ([Homegear][]
+before 2015-07-01, [LXCCU][], a real [CCU][], Windows configuration software,
+...) is used to connect to hmland, the `-I` switch might be needed to
+impersonate a LAN-interface (this replaces the identity string HM-USB-IF with
+HM-LAN-IF).
 Software which needs this will not keep a stable connection open to
 hmland without this switch. It was the hardcoded default in versions
 < 0.100.
