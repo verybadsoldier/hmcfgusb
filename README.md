@@ -7,7 +7,7 @@ switches, sensors, ...).
 
 This repository contains, amongst others, an application, which emulates the
 HomeMatic LAN configuration adapter-protocol to make it possible to use the
-HM-CFG-USB in [Fhem][] or as a lan configuration tool for the CCU or the
+HM-CFG-USB in [Fhem][] or as a lan configuration tool for the [CCU][] or the
 HomeMatic windows configuration software, also supporting devices using
 AES-signing like [KeyMatic][].
 
@@ -18,6 +18,7 @@ AES-signing like [KeyMatic][].
 [HomeMatic]: http://www.homematic.com/
 [Fhem]: http://fhem.de/
 [KeyMatic]: http://www.elv.de/homematic-funk-tuerschlossantrieb-keymatic-silber-inkl-funk-handsender.html
+[CCU]: http://www.elv.de/homematic-zentrale-ccu-2.html
 
 ### Short hmland HowTo: ###
 
@@ -48,11 +49,10 @@ AES-signing like [KeyMatic][].
     ``attr hmusb hmId <hmId>``
 
 **Important compatibility information:**
-If older Fhem-versions (before 2015-06-19) or other software ([Homegear][]
-before 2015-07-01, [LXCCU][], a real [CCU][], Windows configuration software,
-...) is used to connect to hmland, the `-I` switch might be needed to
+If older Fhem-versions (before 2015-06-19) or [Homegear][] before 2015-07-01
+is used to connect to hmland, the `-I` switch might be needed to
 impersonate a LAN-interface (this replaces the identity string HM-USB-IF with
-HM-LAN-IF).
+HM-LAN-IF). eQ-3 rfd (CCU and configuration software) works without this switch.
 Software which needs this will not keep a stable connection open to
 hmland without this switch. It was the hardcoded default in versions
 < 0.100.
@@ -63,8 +63,6 @@ differentiate between HM-CFG-LAN and HM-CFG-USB.
 [releases-directory]: https://git.zerfleddert.de/hmcfgusb/releases/
 [hmcfgusb-HEAD-xxxxxxx.tar.gz]: https://git.zerfleddert.de/cgi-bin/gitweb.cgi/hmcfgusb/snapshot/HEAD.tar.gz
 [Homegear]: https://www.homegear.eu/
-[LXCCU]: http://www.lxccu.com/
-[CCU]: http://www.elv.de/homematic-zentrale-ccu-2.html
 
 ### Updating the HM-CFG-USB firmware to version 0.967: ###
 
