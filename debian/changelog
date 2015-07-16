@@ -1,0 +1,11 @@
+hmcfgusb (0.097-2) unstable; urgency=low
+
+  * Add logrotate script
+
+ -- JSurf <jsurf@gmx.de>  Wed, 25 Jun 2014 10:37:00 +0200
+
+hmcfgusb (0.097-1) unstable; urgency=low
+
+  * Initial release
+
+ -- JSurf <jsurf@gmx.de>  Thu, 19 Jun 2014 09:42:47 +0200
