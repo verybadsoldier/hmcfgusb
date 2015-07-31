@@ -1,6 +1,6 @@
 /* HM-sniffer for HM-CFG-USB
  *
- * Copyright (c) 2013 Michael Gernoth <michael@gernoth.net>
+ * Copyright (c) 2013-15 Michael Gernoth <michael@gernoth.net>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -29,6 +29,7 @@
 #include <strings.h>
 #include <poll.h>
 #include <errno.h>
+#include <time.h>
 #include <sys/time.h>
 #include <libusb-1.0/libusb.h>
 
@@ -36,8 +37,10 @@
 #include "hexdump.h"
 #include "hmcfgusb.h"
 
+static int verbose = 0;
+
 /* See HMConfig.pm */
-char *hm_message_types(uint8_t type)
+char *hm_message_types(uint8_t type, uint8_t subtype)
 {
 	switch(type) {
 		case 0x00:
@@ -47,13 +50,20 @@ char *hm_message_types(uint8_t type)
 			return "Configuration";
 			break;
 		case 0x02:
-			return "Acknowledge";
+			if (subtype >= 0x80 && subtype <= 0x8f) {
+				return "NACK";
+			} else if (subtype == 0x01) {
+				return "ACKinfo";
+			} else if (subtype == 0x04) {
+				return "AESrequest";
+			}
+			return "ACK";
 			break;
 		case 0x03:
-			return "AES";
+			return "AESreply";
 			break;
 		case 0x04:
-			return "AES-Key";
+			return "AESkey";
 			break;
 		case 0x10:
 			return "Information";
@@ -82,6 +92,9 @@ char *hm_message_types(uint8_t type)
 		case 0x58:
 			return "Climate event";
 			break;
+		case 0x5a:
+			return "Thermal control";
+			break;
 		case 0x70:
 			return "Weather event";
 			break;
@@ -96,43 +109,59 @@ static void dissect_hm(uint8_t *buf, int len)
 	struct timeval tv;
 	struct tm *tmp;
 	char ts[32];
+	static int count = 0;
 	int i;
 
 	gettimeofday(&tv, NULL);
 	tmp = localtime(&tv.tv_sec);
 	memset(ts, 0, sizeof(ts));
 	strftime(ts, sizeof(ts)-1, "%Y-%m-%d %H:%M:%S", tmp);
-	printf("%s.%06ld: ", ts, tv.tv_usec);
 
-	for (i = 0; i < len; i++) {
-		printf("%02X", buf[i]);
+	if (verbose) {
+		printf("%s.%06ld: ", ts, tv.tv_usec);
+
+		for (i = 0; i < len; i++) {
+			printf("%02X", buf[i]);
+		}
+		printf("\n");
+		printf("Packet information:\n");
+		printf("\tLength: %u\n", buf[0]);
+		printf("\tMessage ID: %u\n", buf[1]);
+		printf("\tSender: %02x%02x%02x\n", buf[4], buf[5], buf[6]);
+		printf("\tReceiver: %02x%02x%02x\n", buf[7], buf[8], buf[9]);
+		printf("\tControl Byte: 0x%02x\n", buf[2]);
+		printf("\t\tFlags: ");
+		if (buf[2] & (1 << 0)) printf("WAKEUP ");
+		if (buf[2] & (1 << 1)) printf("WAKEMEUP ");
+		if (buf[2] & (1 << 2)) printf("CFG ");
+		if (buf[2] & (1 << 3)) printf("? ");
+		if (buf[2] & (1 << 4)) printf("BURST ");
+		if (buf[2] & (1 << 5)) printf("BIDI ");
+		if (buf[2] & (1 << 6)) printf("RPTED ");
+		if (buf[2] & (1 << 7)) printf("RPTEN ");
+		printf("\n");
+		printf("\tMessage type: %s (0x%02x 0x%02x)\n", hm_message_types(buf[3], buf[10]), buf[3], buf[10]);
+		printf("\tMessage: ");
+		for (i = 10; i < len; i++) {
+			printf("%02X", buf[i]);
+		}
+		printf("\n");
+
+		printf("\n");
+	} else {
+		if (!(count++ % 20))
+			printf("                         LL NR FL CM sender recvr  payload\n");
+		printf("%s.%03ld: %02X %02X %02X %02X %02X%02X%02X %02X%02X%02X ",
+				ts, tv.tv_usec/1000,
+				buf[0], buf[1], buf[2], buf[3],
+				buf[4], buf[5], buf[6],
+				buf[7], buf[8], buf[9]);
+
+		for (i = 10; i < len; i++) {
+			printf("%02X", buf[i]);
+		}
+		printf("%s(%s)\n", (i>10)?" ":"", hm_message_types(buf[3], buf[10]));
 	}
-	printf("\n");
-	printf("Packet information:\n");
-	printf("\tLength: %u\n", buf[0]);
-	printf("\tMessage ID: %u\n", buf[1]);
-	printf("\tSender: %02x%02x%02x\n", buf[4], buf[5], buf[6]);
-	printf("\tReceiver: %02x%02x%02x\n", buf[7], buf[8], buf[9]);
-	printf("\tControl Byte: 0x%02x\n", buf[2]);
-	printf("\t\tFlags: ");
-	if (buf[2] & (1 << 0)) printf("WAKEUP ");
-	if (buf[2] & (1 << 1)) printf("WAKEMEUP ");
-	if (buf[2] & (1 << 2)) printf("CFG ");
-	if (buf[2] & (1 << 3)) printf("? ");
-	if (buf[2] & (1 << 4)) printf("BURST ");
-	if (buf[2] & (1 << 5)) printf("BIDI ");
-	if (buf[2] & (1 << 6)) printf("RPTED ");
-	if (buf[2] & (1 << 7)) printf("RPTEN ");
-	printf("\n");
-	printf("\tMessage type: %s (0x%02x)\n", hm_message_types(buf[3]), buf[3]);
-	printf("\tMessage: ");
-	for (i = 10; i < len; i++) {
-		printf("%02X", buf[i]);
-	}
-	printf("\n");
-
-	printf("\n");
-
 }
 
 struct recv_data {
@@ -169,11 +198,40 @@ static int parse_hmcfgusb(uint8_t *buf, int buf_len, void *data)
 	return 1;
 }
 
+void hmsniff_syntax(char *prog)
+{
+	fprintf(stderr, "Syntax: %s options\n\n", prog);
+	fprintf(stderr, "Possible options:\n");
+	fprintf(stderr, "\t-v\t\tverbose mode\n");
+	fprintf(stderr, "\t-V\t\tshow version (" VERSION ")\n");
+
+}
+
 int main(int argc, char **argv)
 {
 	struct hmcfgusb_dev *dev;
 	struct recv_data rdata;
 	int quit = 0;
+	int opt;
+
+	while((opt = getopt(argc, argv, "vV")) != -1) {
+		switch (opt) {
+			case 'v':
+				verbose = 1;
+				break;
+			case 'V':
+				printf("hmsniff " VERSION "\n");
+				printf("Copyright (c) 2013-15 Michael Gernoth\n\n");
+				exit(EXIT_SUCCESS);
+			case 'h':
+			case ':':
+			case '?':
+			default:
+				hmsniff_syntax(argv[0]);
+				exit(EXIT_FAILURE);
+				break;
+		}
+	}
 
 	hmcfgusb_set_debug(0);
 
