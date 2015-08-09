@@ -60,6 +60,14 @@ hmland without this switch. It was the hardcoded default in versions
 This incompatibility is needed so connecting software is able to
 differentiate between HM-CFG-LAN and HM-CFG-USB.
 
+**Important security information:**
+Versions before 0.101 do not correctly transmit the AES channel-mask
+to the HM-CFG-USB, which results in signature-requests not being generated
+by the device in most cases. This can lead to processing of unsigned messages
+by the host-software. If you are relying on authenticated messages
+(with e.g. aesCommReq in Fhem) from devices like door-sensors and remotes,
+you should upgrade to at least version 0.101.
+
 [releases-directory]: https://git.zerfleddert.de/hmcfgusb/releases/
 [hmcfgusb-HEAD-xxxxxxx.tar.gz]: https://git.zerfleddert.de/cgi-bin/gitweb.cgi/hmcfgusb/snapshot/HEAD.tar.gz
 [Homegear]: https://www.homegear.eu/
