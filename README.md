@@ -76,13 +76,15 @@ you should upgrade to at least version 0.101.
 
 1.  Compile the hmcfgusb utilities like in the hmland HowTo above
     (steps 1 to 5) and stay in the directory
-2.  Download the new firmware: [hmusbif.03c7.enc][]:
+2.  Download the new firmware: [hmusbif.03c7.enc][] (extracted from the
+    [Firmware update tool][]):
     `wget https://git.zerfleddert.de/hmcfgusb/firmware/hmusbif.03c7.enc`
 3.  Make sure that hmland is not running
 4.  Flash the update to the USB-stick:
     `./flash-hmcfgusb hmusbif.03c7.enc` (You might need to use `sudo` for this)
 
 [hmusbif.03c7.enc]: https://git.zerfleddert.de/hmcfgusb/firmware/hmusbif.03c7.enc
+[Firmware update tool]: http://www.eq-3.de/Downloads/Software/Firmware%20Update%20Tool/HM-CFG-USB-2_FW-UpdateTool-Usersoftware_V1_1_eQ-3_140619.zip
 
 ### Updating HomemMatic devices over the air (OTA) (also for CUL devices): ###
 
