@@ -95,6 +95,9 @@ char *hm_message_types(uint8_t type, uint8_t subtype)
 		case 0x5a:
 			return "Thermal control";
 			break;
+		case 0x5e:
+			return "Power event";
+			break;
 		case 0x70:
 			return "Weather event";
 			break;
@@ -151,6 +154,7 @@ static void dissect_hm(uint8_t *buf, int len)
 	} else {
 		if (!(count++ % 20))
 			printf("                         LL NR FL CM sender recvr  payload\n");
+
 		printf("%s.%03ld: %02X %02X %02X %02X %02X%02X%02X %02X%02X%02X ",
 				ts, tv.tv_usec/1000,
 				buf[0], buf[1], buf[2], buf[3],
