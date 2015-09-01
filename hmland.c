@@ -43,6 +43,7 @@
 #include "version.h"
 #include "hexdump.h"
 #include "hmcfgusb.h"
+#include "util.h"
 
 #define PID_FILE "/var/run/hmland.pid"
 
@@ -141,8 +142,6 @@ static void write_log(char *buf, int len, char *fmt, ...)
 
 static int format_part_out(uint8_t **inpos, int inlen, uint8_t **outpos, int outlen, int len, int flags)
 {
-	const uint8_t nibble[16] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
-		'A', 'B', 'C', 'D', 'E', 'F'};
 	uint8_t *buf_out = *outpos;
 	uint8_t *outend = *outpos + outlen;
 	uint8_t *inend = *inpos + inlen;
@@ -164,9 +163,9 @@ static int format_part_out(uint8_t **inpos, int inlen, uint8_t **outpos, int out
 		CHECK_AVAIL(len);
 		CHECK_SPACE(len*2);
 		for (i = 0; i < len; i++) {
-			**outpos = nibble[((**inpos) & 0xf0) >> 4];
+			**outpos = nibble_to_ascii(((**inpos) & 0xf0) >> 4);
 			*outpos += 1;
-			**outpos = nibble[((**inpos) & 0xf)];
+			**outpos = nibble_to_ascii(((**inpos) & 0xf));
 			*inpos += 1; *outpos += 1;
 		}
 	} else {
@@ -192,21 +191,6 @@ static int format_part_out(uint8_t **inpos, int inlen, uint8_t **outpos, int out
 	}
 
 	return *outpos - buf_out;
-}
-
-static uint8_t ascii_to_nibble(uint8_t a)
-{
-	uint8_t c = 0x00;
-
-	if ((a >= '0') && (a <= '9')) {
-		c = a - '0';
-	} else if ((a >= 'A') && (a <= 'F')) {
-		c = (a - 'A') + 10;
-	} else if ((a >= 'a') && (a <= 'f')) {
-		c = (a - 'a') + 10;
-	}
-
-	return c;
 }
 
 static int parse_part_in(uint8_t **inpos, int inlen, uint8_t **outpos, int outlen, int flags)

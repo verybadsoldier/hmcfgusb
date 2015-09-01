@@ -3,7 +3,7 @@ LDFLAGS=-L/opt/local/lib
 LDLIBS=-lusb-1.0 -lrt
 CC=gcc
 
-HMLAN_OBJS=hmcfgusb.o hmland.o
+HMLAN_OBJS=hmcfgusb.o hmland.o util.o
 HMSNIFF_OBJS=hmcfgusb.o hmsniff.o
 FLASH_HMCFGUSB_OBJS=hmcfgusb.o firmware.o util.o flash-hmcfgusb.o
 FLASH_OTA_OBJS=hmcfgusb.o culfw.o firmware.o util.o flash-ota.o
