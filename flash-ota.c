@@ -43,12 +43,17 @@
 #include "culfw.h"
 #include "util.h"
 
-#define MAX_RETRIES	5
+#define MAX_RETRIES		5
+#define NORMAL_MAX_PAYLOAD	37
+#define LOWE_MAX_PAYLOAD	17
 
 extern char *optarg;
 
 uint32_t hmid = 0;
 uint32_t my_hmid = 0;
+
+/* Maximum payloadlen supported by IO */
+uint32_t max_payloadlen = NORMAL_MAX_PAYLOAD;
 
 enum device_type {
 	DEVICE_TYPE_HMCFGUSB,
@@ -337,6 +342,7 @@ void flash_ota_syntax(char *prog)
 	fprintf(stderr, "\nPossible options:\n");
 	fprintf(stderr, "\t-c device\tenable CUL-mode with CUL at path \"device\"\n");
 	fprintf(stderr, "\t-b bps\t\tuse CUL with speed \"bps\" (default: %u)\n", DEFAULT_CUL_BPS);
+	fprintf(stderr, "\t-l\t\tlower payloadlen (required for devices with little RAM, e.g. CUL v2 and CUL v4)\n");
 	fprintf(stderr, "\t-h\t\tthis help\n");
 }
 
@@ -366,7 +372,7 @@ int main(int argc, char **argv)
 
 	printf("HomeMatic OTA flasher version " VERSION "\n\n");
 
-	while((opt = getopt(argc, argv, "b:c:f:hs:")) != -1) {
+	while((opt = getopt(argc, argv, "b:c:f:hls:")) != -1) {
 		switch (opt) {
 			case 'b':
 				bps = atoi(optarg);
@@ -376,6 +382,10 @@ int main(int argc, char **argv)
 				break;
 			case 'f':
 				fw_file = optarg;
+				break;
+			case 'l':
+				printf("Reducing payload-len from %d to %d\n", max_payloadlen, LOWE_MAX_PAYLOAD);
+				max_payloadlen = LOWE_MAX_PAYLOAD;
 				break;
 			case 's':
 				serial = optarg;
@@ -412,7 +422,7 @@ int main(int argc, char **argv)
 		}
 		dev.type = DEVICE_TYPE_CULFW;
 
-		printf("Requesting firmware-version\n");
+		printf("Requesting firmware version\n");
 		culfw_send(dev.culfw, "\r\n", 2);
 		culfw_flush(dev.culfw);
 
@@ -645,11 +655,11 @@ int main(int argc, char **argv)
 		first = 1;
 		cnt = 0;
 		do {
-			int payloadlen = 35;
+			int payloadlen = max_payloadlen - 2;
 			int ack = 0;
 
 			if (first) {
-				payloadlen = 37;
+				payloadlen = max_payloadlen;
 				first = 0;
 			}
 
