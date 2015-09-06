@@ -45,7 +45,7 @@
 
 #define MAX_RETRIES		5
 #define NORMAL_MAX_PAYLOAD	37
-#define LOWE_MAX_PAYLOAD	17
+#define LOWER_MAX_PAYLOAD	17
 
 extern char *optarg;
 
@@ -384,8 +384,8 @@ int main(int argc, char **argv)
 				fw_file = optarg;
 				break;
 			case 'l':
-				printf("Reducing payload-len from %d to %d\n", max_payloadlen, LOWE_MAX_PAYLOAD);
-				max_payloadlen = LOWE_MAX_PAYLOAD;
+				printf("Reducing payload-len from %d to %d\n", max_payloadlen, LOWER_MAX_PAYLOAD);
+				max_payloadlen = LOWER_MAX_PAYLOAD;
 				break;
 			case 's':
 				serial = optarg;
