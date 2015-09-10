@@ -51,6 +51,8 @@ extern char *optarg;
 
 uint32_t hmid = 0;
 uint32_t my_hmid = 0;
+char key[16] = {0};
+uint32_t kNo = 0;
 
 /* Maximum payloadlen supported by IO */
 uint32_t max_payloadlen = NORMAL_MAX_PAYLOAD;
@@ -77,6 +79,7 @@ struct recv_data {
 	uint16_t status;
 	int speed;
 	uint16_t version;
+	uint8_t credits;
 };
 
 static int parse_hmcfgusb(uint8_t *buf, int buf_len, void *data)
@@ -108,6 +111,7 @@ static int parse_hmcfgusb(uint8_t *buf, int buf_len, void *data)
 			break;
 		case 'H':
 			rdata->version = (buf[11] << 8) | buf[12];
+			rdata->credits = buf[36];
 			my_hmid = (buf[0x1b] << 16) | (buf[0x1c] << 8) | buf[0x1d];
 			break;
 		default:
@@ -218,14 +222,16 @@ int send_hm_message(struct ota_dev *dev, struct recv_data *rdata, uint8_t *msg)
 
 			while (1) {
 				if (rdata->message_type == MESSAGE_TYPE_R) {
-					if (((rdata->status & 0xff) == 0x01) ||
-					    ((rdata->status & 0xff) == 0x02)) {
+					if (((rdata->status & 0xdf) == 0x01) ||
+					    ((rdata->status & 0xdf) == 0x02)) {
 						break;
 					} else {
 						if ((rdata->status & 0xff00) == 0x0400) {
 							fprintf(stderr, "\nOut of credits!\n");
 						} else if ((rdata->status & 0xff) == 0x08) {
 							fprintf(stderr, "\nMissing ACK!\n");
+						} else if ((rdata->status & 0xff) == 0x30) {
+							fprintf(stderr, "\nUnknown AES-key requested!\n");
 						} else {
 							fprintf(stderr, "\nInvalid status: %04x\n", rdata->status);
 						}
@@ -339,11 +345,16 @@ void flash_ota_syntax(char *prog)
 	fprintf(stderr, "Mandatory parameters:\n");
 	fprintf(stderr, "\t-f firmware.eq3\tfirmware file to flash\n");
 	fprintf(stderr, "\t-s SERIAL\tserial of device to flash\n");
-	fprintf(stderr, "\nPossible options:\n");
+	fprintf(stderr, "\nOptional parameters:\n");
 	fprintf(stderr, "\t-c device\tenable CUL-mode with CUL at path \"device\"\n");
 	fprintf(stderr, "\t-b bps\t\tuse CUL with speed \"bps\" (default: %u)\n", DEFAULT_CUL_BPS);
 	fprintf(stderr, "\t-l\t\tlower payloadlen (required for devices with little RAM, e.g. CUL v2 and CUL v4)\n");
 	fprintf(stderr, "\t-h\t\tthis help\n");
+	fprintf(stderr, "\nOptional parameters for automatically sending device to bootloader\n");
+	fprintf(stderr, "\t-C\t\tHMID of central (3 hex-bytes, no prefix, e.g. ABCDEF)\n");
+	fprintf(stderr, "\t-D\t\tHMID of device (3 hex-bytes, no prefix, e.g. 123456)\n");
+	fprintf(stderr, "\t-K\t\tKNO:KEY AES key-number and key (hex) separated by colon (Fhem hmKey attribute)\n");
+	fprintf(stderr, "\t\t\tAES is currently not supported when using a culfw-device!\n");
 }
 
 int main(int argc, char **argv)
@@ -353,6 +364,7 @@ int main(int argc, char **argv)
 	char *fw_file = NULL;
 	char *serial = NULL;
 	char *culfw_dev = NULL;
+	char *endptr = NULL;
 	unsigned int bps = DEFAULT_CUL_BPS;
 	struct ota_dev dev;
 	struct recv_data rdata;
@@ -372,7 +384,7 @@ int main(int argc, char **argv)
 
 	printf("HomeMatic OTA flasher version " VERSION "\n\n");
 
-	while((opt = getopt(argc, argv, "b:c:f:hls:")) != -1) {
+	while((opt = getopt(argc, argv, "b:c:f:hls:C:D:K:")) != -1) {
 		switch (opt) {
 			case 'b':
 				bps = atoi(optarg);
@@ -389,6 +401,42 @@ int main(int argc, char **argv)
 				break;
 			case 's':
 				serial = optarg;
+				break;
+			case 'C':
+				my_hmid = strtoul(optarg, &endptr, 16);
+				if (*endptr != '\0') {
+					fprintf(stderr, "Invalid central HMID!\n\n");
+					flash_ota_syntax(argv[0]);
+					exit(EXIT_FAILURE);
+				}
+				break;
+			case 'D':
+				hmid = strtoul(optarg, &endptr, 16);
+				if (*endptr != '\0') {
+					fprintf(stderr, "Invalid device HMID!\n\n");
+					flash_ota_syntax(argv[0]);
+					exit(EXIT_FAILURE);
+				}
+				break;
+			case 'K':
+				kNo = strtoul(optarg, &endptr, 10);
+				if (*endptr != ':') {
+					fprintf(stderr, "Invalid key number!\n\n");
+					flash_ota_syntax(argv[0]);
+					exit(EXIT_FAILURE);
+				}
+				endptr++;
+				for (cnt = 0; cnt < 16; cnt++) {
+					if (*endptr == '\0' || *(endptr+1) == '\0' ||
+					    !validate_nibble(*endptr) ||
+					    !validate_nibble(*(endptr+1))) {
+						fprintf(stderr, "Invalid key!\n\n");
+						flash_ota_syntax(argv[0]);
+						exit(EXIT_FAILURE);
+					}
+					key[cnt] = ascii_to_nibble(*endptr) << 4 | ascii_to_nibble(*(endptr+1));
+					endptr += 2;
+				}
 				break;
 			case 'h':
 			case ':':
@@ -414,6 +462,12 @@ int main(int argc, char **argv)
 	memset(&dev, 0, sizeof(struct ota_dev));
 
 	if (culfw_dev) {
+		if (kNo) {
+			fprintf(stderr, "\nAES currently not supported with culfw-device!\n");
+			flash_ota_syntax(argv[0]);
+			exit(EXIT_FAILURE);
+		}
+
 		printf("Opening culfw-device at path %s with speed %u\n", culfw_dev, bps);
 		dev.culfw = culfw_init(culfw_dev, bps, parse_culfw, &rdata);
 		if (!dev.culfw) {
@@ -450,6 +504,8 @@ int main(int argc, char **argv)
 			exit(EXIT_FAILURE);
 		}
 	} else {
+		uint32_t new_hmid = my_hmid;
+
 		hmcfgusb_set_debug(debug);
 
 		dev.hmcfgusb = hmcfgusb_init(parse_hmcfgusb, &rdata);
@@ -458,37 +514,6 @@ int main(int argc, char **argv)
 			exit(EXIT_FAILURE);
 		}
 		dev.type = DEVICE_TYPE_HMCFGUSB;
-
-		printf("\nRebooting HM-CFG-USB to avoid running out of credits\n\n");
-
-		if (!dev.hmcfgusb->bootloader) {
-			printf("HM-CFG-USB not in bootloader mode, entering bootloader.\n");
-			printf("Waiting for device to reappear...\n");
-
-			do {
-				if (dev.hmcfgusb) {
-					if (!dev.hmcfgusb->bootloader)
-						hmcfgusb_enter_bootloader(dev.hmcfgusb);
-					hmcfgusb_close(dev.hmcfgusb);
-				}
-				sleep(1);
-			} while (((dev.hmcfgusb = hmcfgusb_init(parse_hmcfgusb, &rdata)) == NULL) || (!dev.hmcfgusb->bootloader));
-		}
-
-		if (dev.hmcfgusb->bootloader) {
-			printf("HM-CFG-USB in bootloader mode, rebooting\n");
-
-			do {
-				if (dev.hmcfgusb) {
-					if (dev.hmcfgusb->bootloader)
-						hmcfgusb_leave_bootloader(dev.hmcfgusb);
-					hmcfgusb_close(dev.hmcfgusb);
-				}
-				sleep(1);
-			} while (((dev.hmcfgusb = hmcfgusb_init(parse_hmcfgusb, &rdata)) == NULL) || (dev.hmcfgusb->bootloader));
-		}
-
-		printf("\n\nHM-CFG-USB opened\n\n");
 
 		memset(out, 0, sizeof(out));
 		out[0] = 'K';
@@ -512,12 +537,106 @@ int main(int argc, char **argv)
 			exit(EXIT_FAILURE);
 		}
 
-		printf("HM-CFG-USB firmware version: %u\n", rdata.version);
+		printf("HM-CFG-USB firmware version: %u, used credits: %u%%\n", rdata.version, rdata.credits);
+
+		if (rdata.credits >= 40) {
+			printf("\nRebooting HM-CFG-USB to avoid running out of credits\n\n");
+
+			if (!dev.hmcfgusb->bootloader) {
+				printf("HM-CFG-USB not in bootloader mode, entering bootloader.\n");
+				printf("Waiting for device to reappear...\n");
+
+				do {
+					if (dev.hmcfgusb) {
+						if (!dev.hmcfgusb->bootloader)
+							hmcfgusb_enter_bootloader(dev.hmcfgusb);
+						hmcfgusb_close(dev.hmcfgusb);
+					}
+					sleep(1);
+				} while (((dev.hmcfgusb = hmcfgusb_init(parse_hmcfgusb, &rdata)) == NULL) || (!dev.hmcfgusb->bootloader));
+			}
+
+			if (dev.hmcfgusb->bootloader) {
+				printf("HM-CFG-USB in bootloader mode, rebooting\n");
+
+				do {
+					if (dev.hmcfgusb) {
+						if (dev.hmcfgusb->bootloader)
+							hmcfgusb_leave_bootloader(dev.hmcfgusb);
+						hmcfgusb_close(dev.hmcfgusb);
+					}
+					sleep(1);
+				} while (((dev.hmcfgusb = hmcfgusb_init(parse_hmcfgusb, &rdata)) == NULL) || (dev.hmcfgusb->bootloader));
+			}
+		}
+
+		printf("\n\nHM-CFG-USB opened\n\n");
+
+		if (new_hmid && (my_hmid != new_hmid)) {
+			printf("Changing hmid from %06x to %06x\n", my_hmid, new_hmid);
+
+			memset(out, 0, sizeof(out));
+			out[0] = 'A';
+			out[1] = (new_hmid >> 16) & 0xff;
+			out[2] = (new_hmid >> 8) & 0xff;
+			out[3] = new_hmid & 0xff;
+
+			hmcfgusb_send(dev.hmcfgusb, out, sizeof(out), 1);
+
+			my_hmid = new_hmid;
+		}
+
+		if (kNo) {
+			printf("Setting AES-key\n");
+
+			memset(out, 0, sizeof(out));
+			out[0] = 'Y';
+			out[1] = 0x01;
+			out[2] = kNo;
+			out[3] = sizeof(key);
+			memcpy(&(out[4]), key, sizeof(key));
+			hmcfgusb_send(dev.hmcfgusb, out, sizeof(out), 1);
+
+			memset(out, 0, sizeof(out));
+			out[0] = 'Y';
+			out[1] = 0x02;
+			out[2] = 0x00;
+			out[3] = 0x00;
+			hmcfgusb_send(dev.hmcfgusb, out, sizeof(out), 1);
+
+			memset(out, 0, sizeof(out));
+			out[0] = 'Y';
+			out[1] = 0x03;
+			out[2] = 0x00;
+			out[3] = 0x00;
+			hmcfgusb_send(dev.hmcfgusb, out, sizeof(out), 1);
+		}
 	}
 
 	if (!switch_speed(&dev, &rdata, 10)) {
 		fprintf(stderr, "Can't switch speed!\n");
 		exit(EXIT_FAILURE);
+	}
+
+	if (hmid && my_hmid) {
+		printf("Sending device with hmid %06x to bootloader\n", hmid);
+		out[MSGID] = msgid++;
+		out[CTL] = 0x30;
+		out[TYPE] = 0x11;
+		SET_SRC(out, my_hmid);
+		SET_DST(out, hmid);
+		out[PAYLOAD] = 0xCA;
+		SET_LEN_FROM_PAYLOADLEN(out, 1);
+
+		cnt = 3;
+		do {
+			if (send_hm_message(&dev, &rdata, out)) {
+				break;
+			}
+		} while (cnt--);
+		if (cnt == -1) {
+			printf("Failed to send device to bootloader, please enter bootloader manually.\n");
+		}
 	}
 
 	printf("Waiting for device with serial %s\n", serial);

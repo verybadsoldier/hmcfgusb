@@ -101,6 +101,11 @@ you should upgrade to at least version 0.101.
     the new firmware to the device with serial *KEQ0123456*:  
      `./flash-ota -f hm_cc_rt_dn_update_V1_4_001_141020.eq3 -s KEQ0123456 -c /dev/ttyACM0`
 
+**Automatic firmware-updates:**  
+The options `-C`, `-D` and `-K` can be used to send a device to the
+bootloader automatically without manually rebooting the device while
+pressing buttons.
+
 [eQ-3]: http://www.eq-3.de/downloads.html
 [culfw]: http://culfw.de/culfw.html
 [CUL]: http://busware.de/tiki-index.php?page=CUL
