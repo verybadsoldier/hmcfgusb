@@ -96,7 +96,7 @@ uint8_t* hm_sign(uint8_t *key, uint8_t *challenge, uint8_t *m_frame, uint8_t *ex
 			break;
 		}
 
-		resp[i] ^= m_frame[PAYLOAD + 1+ i];
+		resp[i] ^= m_frame[PAYLOAD + 1 + i];
 	}
 
 	if (debug)
