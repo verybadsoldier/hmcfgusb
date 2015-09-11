@@ -10,6 +10,8 @@ flash-ota.d
 flash-ota.o
 firmware.d
 firmware.o
+hm.d
+hm.o
 hmcfgusb.d
 hmcfgusb.o
 hmland

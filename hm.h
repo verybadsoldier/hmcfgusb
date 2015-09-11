@@ -1,6 +1,6 @@
-/* HomeMatic defines
+/* HomeMatic defines and functions
  *
- * Copyright (c) 2014 Michael Gernoth <michael@gernoth.net>
+ * Copyright (c) 2014-15 Michael Gernoth <michael@gernoth.net>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -34,3 +34,6 @@
 #define SET_DST(buf, dst)	do { buf[0x07] = (dst >> 16) & 0xff; buf[0x08] = (dst >> 8) & 0xff; buf[0x09] = dst & 0xff; } while(0)
 
 #define SET_LEN_FROM_PAYLOADLEN(buf, payloadlen)	do { buf[0x00] = payloadlen + 0x09; } while(0)
+#define PAYLOADLEN(buf)					(buf[0x00] - 0x09)
+
+uint8_t* hm_sign(uint8_t *key, uint8_t *challenge, uint8_t *m_frame, uint8_t *exp_auth, uint8_t *resp);

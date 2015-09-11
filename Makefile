@@ -6,7 +6,7 @@ CC=gcc
 HMLAN_OBJS=hmcfgusb.o hmland.o util.o
 HMSNIFF_OBJS=hmcfgusb.o hmsniff.o
 FLASH_HMCFGUSB_OBJS=hmcfgusb.o firmware.o util.o flash-hmcfgusb.o
-FLASH_OTA_OBJS=hmcfgusb.o culfw.o firmware.o util.o flash-ota.o
+FLASH_OTA_OBJS=hmcfgusb.o culfw.o firmware.o util.o flash-ota.o hm.o aes.o
 
 OBJS=$(HMLAN_OBJS) $(HMSNIFF_OBJS) $(FLASH_HMCFGUSB_OBJS) $(FLASH_OTA_OBJS)
 

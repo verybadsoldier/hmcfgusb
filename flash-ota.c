@@ -1,6 +1,6 @@
 /* flasher for HomeMatic-devices supporting OTA updates
  *
- * Copyright (c) 2014 Michael Gernoth <michael@gernoth.net>
+ * Copyright (c) 2014-15 Michael Gernoth <michael@gernoth.net>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -51,7 +51,7 @@ extern char *optarg;
 
 uint32_t hmid = 0;
 uint32_t my_hmid = 0;
-char key[16] = {0};
+uint8_t key[16] = {0};
 int32_t kNo = -1;
 
 /* Maximum payloadlen supported by IO */
@@ -179,6 +179,13 @@ static int parse_culfw(uint8_t *buf, int buf_len, void *data)
 				rdata->version |= v;
 			}
 			break;
+		case 'E':
+			{
+				if (!strncmp((char*)buf, "ERR:CCA", 7)) {
+					fprintf(stderr, "CCA didn't complete, too much traffic\n");
+				}
+				break;
+			}
 		default:
 			fprintf(stderr, "Unknown response from CUL: %s", buf);
 			return 0;
@@ -270,7 +277,7 @@ int send_hm_message(struct ota_dev *dev, struct recv_data *rdata, uint8_t *msg)
 				}
 
 				if (msg[CTL] & 0x20) {
-					int cnt = 3;
+					int cnt = 5;
 					int pfd;
 					do {
 						errno = 0;
@@ -284,18 +291,44 @@ int send_hm_message(struct ota_dev *dev, struct recv_data *rdata, uint8_t *msg)
 						if (rdata->message_type == MESSAGE_TYPE_E) {
 							if (rdata->message[TYPE] == 0x02) {
 								if (rdata->message[PAYLOAD] == 0x04) {
-									printf("AES request received but not implemented for culfw!\n");
+									int32_t req_kNo;
+									uint8_t challenge[6];
+									uint8_t respbuf[16];
+									uint8_t *resp;
+
+									req_kNo = rdata->message[rdata->message[LEN]] / 2;
+									memcpy(challenge, &(rdata->message[PAYLOAD+1]), 6);
+
+									if (req_kNo != kNo) {
+										fprintf(stderr, "AES request for unknown key %d!\n", req_kNo);
+									} else {
+										resp = hm_sign(key, challenge, msg, NULL, respbuf);
+										if (resp) {
+											uint8_t rbuf[64];
+
+											memset(rbuf, 0, sizeof(rbuf));
+											rbuf[MSGID] = rdata->message[MSGID];
+											rbuf[CTL] = rdata->message[CTL];
+											rbuf[TYPE] = 0x03;
+											SET_SRC(rbuf, DST(rdata->message));
+											SET_DST(rbuf, SRC(rdata->message));
+											memcpy(&(rbuf[PAYLOAD]), resp, 16);
+											SET_LEN_FROM_PAYLOADLEN(rbuf, 16);
+
+											return send_hm_message(dev, rdata, rbuf);
+										}
+									}
 								} else if (rdata->message[PAYLOAD] >= 0x80 && rdata->message[PAYLOAD] <= 0x8f) {
-									printf("NACK\n");
+									fprintf(stderr, "NACK\n");
 								} else {	/* ACK or ACKinfo */
 									break;
 								}
 							} else {
-								printf("Unexpected message received: ");
+								fprintf(stderr, "Unexpected message received: ");
 								for (i = 0; i < rdata->message[LEN]; i++) {
-									printf("%02x", rdata->message[i+1]);
+									fprintf(stderr, "%02x", rdata->message[i+1]);
 								}
-								printf("\n");
+								fprintf(stderr, "\n");
 							}
 						}
 					} while(cnt--);
@@ -368,7 +401,6 @@ void flash_ota_syntax(char *prog)
 	fprintf(stderr, "\t-C\t\tHMID of central (3 hex-bytes, no prefix, e.g. ABCDEF)\n");
 	fprintf(stderr, "\t-D\t\tHMID of device (3 hex-bytes, no prefix, e.g. 123456)\n");
 	fprintf(stderr, "\t-K\t\tKNO:KEY AES key-number and key (hex) separated by colon (Fhem hmKey attribute)\n");
-	fprintf(stderr, "\t\t\tAES is currently not supported when using a culfw-device!\n");
 }
 
 int main(int argc, char **argv)
@@ -476,12 +508,6 @@ int main(int argc, char **argv)
 	memset(&dev, 0, sizeof(struct ota_dev));
 
 	if (culfw_dev) {
-		if (kNo != -1) {
-			fprintf(stderr, "\nAES currently not supported with culfw-device!\n");
-			flash_ota_syntax(argv[0]);
-			exit(EXIT_FAILURE);
-		}
-
 		printf("Opening culfw-device at path %s with speed %u\n", culfw_dev, bps);
 		dev.culfw = culfw_init(culfw_dev, bps, parse_culfw, &rdata);
 		if (!dev.culfw) {
