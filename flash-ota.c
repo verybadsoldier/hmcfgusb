@@ -283,7 +283,7 @@ int send_hm_message(struct ota_dev *dev, struct recv_data *rdata, uint8_t *msg)
 						}
 						if (rdata->message_type == MESSAGE_TYPE_E) {
 							if (rdata->message[TYPE] == 0x02) {
-								if (rdata->message[PAYLOAD] == 0x01) {
+								if (rdata->message[PAYLOAD] == 0x04) {
 									printf("AES request received but not implemented for culfw!\n");
 								} else if (rdata->message[PAYLOAD] >= 0x80 && rdata->message[PAYLOAD] <= 0x8f) {
 									printf("NACK\n");
