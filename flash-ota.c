@@ -660,7 +660,6 @@ int main(int argc, char **argv)
 
 	if (hmid && my_hmid) {
 		printf("Sending device with hmid %06x to bootloader\n", hmid);
-		out[MSGID] = msgid++;
 		out[CTL] = 0x30;
 		out[TYPE] = 0x11;
 		SET_SRC(out, my_hmid);
@@ -670,6 +669,7 @@ int main(int argc, char **argv)
 
 		cnt = 3;
 		do {
+			out[MSGID] = msgid++;
 			if (send_hm_message(&dev, &rdata, out)) {
 				break;
 			}
