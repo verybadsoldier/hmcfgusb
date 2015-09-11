@@ -106,7 +106,12 @@ The options `-C`, `-D` and `-K` can be used to send a device to the
 bootloader automatically without manually rebooting the device while
 pressing buttons.
 
+**Acknowledgments:**  
+flash-ota uses the public domain [AES implementation by Brad Conte][] for answering
+signing-requests with culfw-devices.
+
 [eQ-3]: http://www.eq-3.de/downloads.html
 [culfw]: http://culfw.de/culfw.html
 [CUL]: http://busware.de/tiki-index.php?page=CUL
 [COC]: http://busware.de/tiki-index.php?page=COC
+[AES implementation by Brad Conte]: https://github.com/B-Con/crypto-algorithms
