@@ -52,7 +52,7 @@ extern char *optarg;
 uint32_t hmid = 0;
 uint32_t my_hmid = 0;
 char key[16] = {0};
-uint32_t kNo = 0;
+int32_t kNo = -1;
 
 /* Maximum payloadlen supported by IO */
 uint32_t max_payloadlen = NORMAL_MAX_PAYLOAD;
@@ -282,7 +282,21 @@ int send_hm_message(struct ota_dev *dev, struct recv_data *rdata, uint8_t *msg)
 							}
 						}
 						if (rdata->message_type == MESSAGE_TYPE_E) {
-							break;
+							if (rdata->message[TYPE] == 0x02) {
+								if (rdata->message[PAYLOAD] == 0x01) {
+									printf("AES request received but not implemented for culfw!\n");
+								} else if (rdata->message[PAYLOAD] >= 0x80 && rdata->message[PAYLOAD] <= 0x8f) {
+									printf("NACK\n");
+								} else {	/* ACK or ACKinfo */
+									break;
+								}
+							} else {
+								printf("Unexpected message received: ");
+								for (i = 0; i < rdata->message[LEN]; i++) {
+									printf("%02x", rdata->message[i+1]);
+								}
+								printf("\n");
+							}
 						}
 					} while(cnt--);
 
@@ -344,7 +358,7 @@ void flash_ota_syntax(char *prog)
 	fprintf(stderr, "Syntax: %s parameters options\n\n", prog);
 	fprintf(stderr, "Mandatory parameters:\n");
 	fprintf(stderr, "\t-f firmware.eq3\tfirmware file to flash\n");
-	fprintf(stderr, "\t-s SERIAL\tserial of device to flash\n");
+	fprintf(stderr, "\t-s SERIAL\tserial of device to flash (optional when using -D)\n");
 	fprintf(stderr, "\nOptional parameters:\n");
 	fprintf(stderr, "\t-c device\tenable CUL-mode with CUL at path \"device\"\n");
 	fprintf(stderr, "\t-b bps\t\tuse CUL with speed \"bps\" (default: %u)\n", DEFAULT_CUL_BPS);
@@ -449,7 +463,7 @@ int main(int argc, char **argv)
 		}
 	}
 
-	if (!fw_file || !serial) {
+	if (!fw_file || (!serial && !hmid)) {
 		flash_ota_syntax(argv[0]);
 		exit(EXIT_FAILURE);
 	}
@@ -462,7 +476,7 @@ int main(int argc, char **argv)
 	memset(&dev, 0, sizeof(struct ota_dev));
 
 	if (culfw_dev) {
-		if (kNo) {
+		if (kNo != -1) {
 			fprintf(stderr, "\nAES currently not supported with culfw-device!\n");
 			flash_ota_syntax(argv[0]);
 			exit(EXIT_FAILURE);
@@ -586,7 +600,7 @@ int main(int argc, char **argv)
 			my_hmid = new_hmid;
 		}
 
-		if (kNo) {
+		if (kNo > 0) {
 			printf("Setting AES-key\n");
 
 			memset(out, 0, sizeof(out));
@@ -639,7 +653,11 @@ int main(int argc, char **argv)
 		}
 	}
 
-	printf("Waiting for device with serial %s\n", serial);
+	if (serial) {
+		printf("Waiting for device with serial %s\n", serial);
+	} else {
+		printf("Waiting for device with HMID %06x\n", hmid);
+	}
 
 	while (1) {
 		errno = 0;
@@ -666,14 +684,17 @@ int main(int argc, char **argv)
 		    (rdata.message[TYPE] == 0x10) && /* Messagte type: Information */
 		    (DST(rdata.message) == 0x000000) && /* Broadcast */
 		    (rdata.message[PAYLOAD] == 0x00)) { /* FUP? */
-			if (!strncmp((char*)&(rdata.message[0x0b]), serial, 10)) {
+			if (serial && !strncmp((char*)&(rdata.message[0x0b]), serial, 10)) {
 				hmid = SRC(rdata.message);
+				break;
+			} else if (!serial && SRC(rdata.message) == hmid) {
+				serial = (char*)&(rdata.message[0x0b]);
 				break;
 			}
 		}
 	}
 
-	printf("Device with serial %s (hmid: %06x) entered firmware-update-mode\n", serial, hmid);
+	printf("Device with serial %s (HMID: %06x) entered firmware-update-mode\n", serial, hmid);
 
 	if (dev.type == DEVICE_TYPE_HMCFGUSB) {
 		printf("Adding HMID\n");
