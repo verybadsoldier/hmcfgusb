@@ -48,7 +48,7 @@ AES-signing like [KeyMatic][].
     ``define hmusb HMLAN 127.0.0.1:1234``  
     ``attr hmusb hmId <hmId>``
 
-**Important compatibility information:**
+**Important compatibility information:**  
 If older Fhem-versions (before 2015-06-19) or [Homegear][] before 2015-07-01
 is used to connect to hmland, the `-I` switch might be needed to
 impersonate a LAN-interface (this replaces the identity string HM-USB-IF with
@@ -60,7 +60,7 @@ hmland without this switch. It was the hardcoded default in versions
 This incompatibility is needed so connecting software is able to
 differentiate between HM-CFG-LAN and HM-CFG-USB.
 
-**Important security information:**
+**Important security information:**  
 Versions before 0.101 do not correctly transmit the AES channel-mask
 to the HM-CFG-USB, which results in signature-requests not being generated
 by the device in most cases. This can lead to processing of unsigned messages
