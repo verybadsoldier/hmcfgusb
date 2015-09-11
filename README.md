@@ -107,7 +107,7 @@ bootloader automatically without manually rebooting the device while
 pressing buttons.
 
 **Acknowledgments:**  
-flash-ota uses the public domain [AES implementation by Brad Conte][] for answering
+flash-ota uses the public domain [AES implementation by Brad Conte][] to answer
 signing-requests with culfw-devices.
 
 [eQ-3]: http://www.eq-3.de/downloads.html
