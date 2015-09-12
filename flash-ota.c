@@ -177,6 +177,16 @@ static int parse_culfw(uint8_t *buf, int buf_len, void *data)
 				*e = '\0';
 				v = atoi(s);
 				rdata->version |= v;
+
+				s = e + 1;
+				e = strchr(s, ' ');
+				if (!e) {
+					break;
+				}
+				*e = '\0';
+				if (!strcmp(s, "a-culfw")) {
+					rdata->version = 0xffff;
+				}
 			}
 			break;
 		case 'E':
@@ -535,9 +545,14 @@ int main(int argc, char **argv)
 				break;
 		}
 
-		printf("culfw-device firmware version: %u.%02u\n", 
-			(rdata.version >> 8) & 0xff,
-			rdata.version & 0xff);
+		printf("culfw-device firmware version: ");
+		if (rdata.version != 0xffff) {
+			printf("%u.%02u\n",
+				(rdata.version >> 8) & 0xff,
+				rdata.version & 0xff);
+		} else {
+			printf("a-culfw\n");
+		}
 
 		if (rdata.version < 0x013a) {
 			fprintf(stderr, "\nThis version does _not_ support firmware upgrade mode, you need at least 1.58!\n");
