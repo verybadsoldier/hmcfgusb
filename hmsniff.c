@@ -101,6 +101,12 @@ char *hm_message_types(uint8_t type, uint8_t subtype)
 		case 0x70:
 			return "Weather event";
 			break;
+		case 0xca:
+			return "Firmware";
+			break;
+		case 0xcb:
+			return "Rf configuration";
+			break;
 		default:
 			return "?";
 			break;
@@ -193,6 +199,7 @@ static int parse_hmcfgusb(uint8_t *buf, int buf_len, void *data)
 			break;
 		case 'R':
 		case 'I':
+		case 'G':
 			break;
 		default:
 			hexdump(buf, buf_len, "Unknown> ");
@@ -206,6 +213,7 @@ void hmsniff_syntax(char *prog)
 {
 	fprintf(stderr, "Syntax: %s options\n\n", prog);
 	fprintf(stderr, "Possible options:\n");
+	fprintf(stderr, "\t-f\t\tfast (100k/firmware update) mode\n");
 	fprintf(stderr, "\t-v\t\tverbose mode\n");
 	fprintf(stderr, "\t-V\t\tshow version (" VERSION ")\n");
 
@@ -216,10 +224,15 @@ int main(int argc, char **argv)
 	struct hmcfgusb_dev *dev;
 	struct recv_data rdata;
 	int quit = 0;
+	int speed = 10;
+	uint8_t speed_buf[2];
 	int opt;
 
-	while((opt = getopt(argc, argv, "vV")) != -1) {
+	while((opt = getopt(argc, argv, "fvV")) != -1) {
 		switch (opt) {
+			case 'f':
+				speed = 100;
+				break;
 			case 'v':
 				verbose = 1;
 				break;
@@ -253,6 +266,11 @@ int main(int argc, char **argv)
 
 		hmcfgusb_send_null_frame(dev, 1);
 		hmcfgusb_send(dev, (unsigned char*)"K", 1, 1);
+
+		hmcfgusb_send_null_frame(dev, 1);
+		speed_buf[0] = 'G';
+		speed_buf[1] = speed;
+		hmcfgusb_send(dev, speed_buf, 2, 1);
 
 		while(!quit) {
 			int fd;
