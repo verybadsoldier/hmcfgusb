@@ -99,7 +99,7 @@ static char * usb_strerror(int e)
 	return unknerr;
 }
 
-static libusb_device_handle *hmcfgusb_find(int vid, int pid) {
+static libusb_device_handle *hmcfgusb_find(int vid, int pid, char *serial) {
 	libusb_device_handle *devh = NULL;
 	libusb_device **list;
 	ssize_t cnt;
@@ -127,6 +127,26 @@ static libusb_device_handle *hmcfgusb_find(int vid, int pid) {
 				fprintf(stderr, "Can't open device: %s\n", usb_strerror(err));
 				libusb_free_device_list(list, 1);
 				return NULL;
+			}
+
+			if (serial) {
+				if (desc.iSerialNumber > 0) {
+					uint8_t devSerial[256];
+					err = libusb_get_string_descriptor_ascii(devh, desc.iSerialNumber, devSerial, sizeof(devSerial));
+					if (err < 0) {
+						fprintf(stderr, "Can't read serial-number: %s\n", usb_strerror(err));
+						libusb_close(devh);
+						libusb_free_device_list(list, 1);
+						return NULL;
+					}
+					if (strcmp((char*)devSerial, (char*)serial)) {
+						libusb_close(devh);
+						continue;
+					}
+				} else {
+					libusb_close(devh);
+					continue;
+				}
 			}
 
 			err = libusb_detach_kernel_driver(devh, INTERFACE);
@@ -296,7 +316,7 @@ out:
 	}
 }
 
-struct hmcfgusb_dev *hmcfgusb_init(hmcfgusb_cb_fn cb, void *data)
+struct hmcfgusb_dev *hmcfgusb_init(hmcfgusb_cb_fn cb, void *data, char *serial)
 {
 	libusb_device_handle *devh = NULL;
 	const struct libusb_pollfd **usb_pfd = NULL;
@@ -315,11 +335,15 @@ struct hmcfgusb_dev *hmcfgusb_init(hmcfgusb_cb_fn cb, void *data)
 	}
 	libusb_initialized = 1;
 
-	devh = hmcfgusb_find(ID_VENDOR, ID_PRODUCT);
+	devh = hmcfgusb_find(ID_VENDOR, ID_PRODUCT, serial);
 	if (!devh) {
-		devh = hmcfgusb_find(ID_VENDOR, ID_PRODUCT_BL);
+		devh = hmcfgusb_find(ID_VENDOR, ID_PRODUCT_BL, serial);
 		if (!devh) {
-			fprintf(stderr, "Can't find/open hmcfgusb!\n");
+			if (serial) {
+				fprintf(stderr, "Can't find/open HM-CFG-USB with serial %s!\n", serial);
+			} else {
+				fprintf(stderr, "Can't find/open HM-CFG-USB!\n");
+			}
 #ifdef NEED_LIBUSB_EXIT
 			hmcfgusb_exit();
 #endif

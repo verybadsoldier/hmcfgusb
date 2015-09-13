@@ -65,6 +65,7 @@ static int reboot_at_minute = -1;
 static int reboot_set = 0;
 static uint8_t *lan_read_buf = NULL;
 static int lan_read_buflen = 0;
+static char *serial = NULL;
 
 struct queued_rx {
 	char *rx;
@@ -505,7 +506,7 @@ static int comm(int fd_in, int fd_out, int master_socket, int flags)
 
 	hmcfgusb_set_debug(debug);
 
-	dev = hmcfgusb_init(hmlan_format_out, &fd_out);
+	dev = hmcfgusb_init(hmlan_format_out, &fd_out, serial);
 	if (!dev) {
 		fprintf(stderr, "Can't initialize HM-CFG-USB!\n");
 		return 0;
@@ -808,6 +809,7 @@ void hmlan_syntax(char *prog)
 	fprintf(stderr, "\t-p n\t\tlisten on port n (default: 1000)\n");
 	fprintf(stderr, "\t-r n\t\treboot HM-CFG-USB after n seconds (0: no reboot, default: %u if FW < 0.967, 0 otherwise)\n", DEFAULT_REBOOT_SECONDS);
 	fprintf(stderr, "\t   hh:mm\treboot HM-CFG-USB daily at hh:mm\n");
+	fprintf(stderr, "\t-S serial\tuse HM-CFG-USB with given serial (for multiple hmland instances)\n");
 	fprintf(stderr, "\t-v\t\tverbose mode\n");
 	fprintf(stderr, "\t-V\t\tshow version (" VERSION ")\n");
 
@@ -822,7 +824,7 @@ int main(int argc, char **argv)
 	char *ep;
 	int opt;
 	
-	while((opt = getopt(argc, argv, "DdhIiPp:Rr:l:L:vV")) != -1) {
+	while((opt = getopt(argc, argv, "DdhIiPp:Rr:l:L:S:vV")) != -1) {
 		switch (opt) {
 			case 'D':
 				debug = 1;
@@ -879,6 +881,9 @@ int main(int argc, char **argv)
 					perror("fopen(logfile)");
 					exit(EXIT_FAILURE);
 				}
+				break;
+			case 'S':
+				serial = optarg;
 				break;
 			case 'v':
 				verbose = 1;

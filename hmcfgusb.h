@@ -35,7 +35,7 @@ struct hmcfgusb_dev {
 
 int hmcfgusb_send(struct hmcfgusb_dev *usbdev, unsigned char* send_data, int len, int done);
 int hmcfgusb_send_null_frame(struct hmcfgusb_dev *usbdev, int silent);
-struct hmcfgusb_dev *hmcfgusb_init(hmcfgusb_cb_fn cb, void *data);
+struct hmcfgusb_dev *hmcfgusb_init(hmcfgusb_cb_fn cb, void *data, char *serial);
 int hmcfgusb_add_pfd(struct hmcfgusb_dev *dev, int fd, short events);
 int hmcfgusb_poll(struct hmcfgusb_dev *dev, int timeout);
 void hmcfgusb_enter_bootloader(struct hmcfgusb_dev *dev);

@@ -1,6 +1,6 @@
 /* flasher for HM-CFG-USB
  *
- * Copyright (c) 2013-14 Michael Gernoth <michael@gernoth.net>
+ * Copyright (c) 2013-15 Michael Gernoth <michael@gernoth.net>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -56,6 +56,15 @@ static int parse_hmcfgusb(uint8_t *buf, int buf_len, void *data)
 	return 1;
 }
 
+void flash_hmcfgusb_syntax(char *prog)
+{
+	fprintf(stderr, "Syntax: %s [options] filename.enc\n\n", prog);
+	fprintf(stderr, "Possible options:\n");
+	fprintf(stderr, "\t-S serial\tuse HM-CFG-USB with given serial\n");
+	fprintf(stderr, "\t-V\t\tshow version (" VERSION ")\n");
+
+}
+
 int main(int argc, char **argv)
 {
 	const char twiddlie[] = { '-', '\\', '|', '/' };
@@ -63,21 +72,45 @@ int main(int argc, char **argv)
 	struct recv_data rdata;
 	uint16_t len;
 	struct firmware *fw;
+	char *serial = "ABC";
+	char *filename = NULL;
 	int block;
 	int pfd;
+	int opt;
 	int debug = 0;
+
+	while((opt = getopt(argc, argv, "S:V")) != -1) {
+		switch (opt) {
+			case 'S':
+				serial = optarg;
+				break;
+			case 'V':
+				printf("flash-hmcfgusb " VERSION "\n");
+				printf("Copyright (c) 2013-15 Michael Gernoth\n\n");
+				exit(EXIT_SUCCESS);
+			case 'h':
+			case ':':
+			case '?':
+			default:
+				flash_hmcfgusb_syntax(argv[0]);
+				exit(EXIT_FAILURE);
+				break;
+		}
+	}
+
+	if (optind == argc - 1) {
+		filename = argv[optind];
+	}
 
 	printf("HM-CFG-USB flasher version " VERSION "\n\n");
 
-	if (argc != 2) {
-		if (argc == 1)
-			fprintf(stderr, "Missing firmware filename!\n\n");
-
-		fprintf(stderr, "Syntax: %s hmusbif.enc\n\n", argv[0]);
+	if (!filename) {
+		fprintf(stderr, "Missing firmware filename!\n\n");
+		flash_hmcfgusb_syntax(argv[0]);
 		exit(EXIT_FAILURE);
 	}
 
-	fw = firmware_read_firmware(argv[1], debug);
+	fw = firmware_read_firmware(filename, debug);
 	if (!fw)
 		exit(EXIT_FAILURE);
 
@@ -85,7 +118,7 @@ int main(int argc, char **argv)
 
 	memset(&rdata, 0, sizeof(rdata));
 
-	dev = hmcfgusb_init(parse_hmcfgusb, &rdata);
+	dev = hmcfgusb_init(parse_hmcfgusb, &rdata, serial);
 	if (!dev) {
 		fprintf(stderr, "Can't initialize HM-CFG-USB\n");
 		exit(EXIT_FAILURE);
@@ -102,7 +135,7 @@ int main(int argc, char **argv)
 				hmcfgusb_close(dev);
 			}
 			sleep(1);
-		} while (((dev = hmcfgusb_init(parse_hmcfgusb, &rdata)) == NULL) || (!dev->bootloader));
+		} while (((dev = hmcfgusb_init(parse_hmcfgusb, &rdata, serial)) == NULL) || (!dev->bootloader));
 	}
 
 	printf("\nHM-CFG-USB opened.\n\n");

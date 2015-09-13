@@ -406,6 +406,7 @@ void flash_ota_syntax(char *prog)
 	fprintf(stderr, "\t-c device\tenable CUL-mode with CUL at path \"device\"\n");
 	fprintf(stderr, "\t-b bps\t\tuse CUL with speed \"bps\" (default: %u)\n", DEFAULT_CUL_BPS);
 	fprintf(stderr, "\t-l\t\tlower payloadlen (required for devices with little RAM, e.g. CUL v2 and CUL v4)\n");
+	fprintf(stderr, "\t-S serial\tuse HM-CFG-USB with given serial\n");
 	fprintf(stderr, "\t-h\t\tthis help\n");
 	fprintf(stderr, "\nOptional parameters for automatically sending device to bootloader\n");
 	fprintf(stderr, "\t-C\t\tHMID of central (3 hex-bytes, no prefix, e.g. ABCDEF)\n");
@@ -429,6 +430,7 @@ int main(int argc, char **argv)
 	uint8_t msgid = 0x1;
 	uint16_t len;
 	struct firmware *fw;
+	char *hmcfgusb_serial = NULL;
 	int block;
 	int pfd;
 	int debug = 0;
@@ -440,7 +442,7 @@ int main(int argc, char **argv)
 
 	printf("HomeMatic OTA flasher version " VERSION "\n\n");
 
-	while((opt = getopt(argc, argv, "b:c:f:hls:C:D:K:")) != -1) {
+	while((opt = getopt(argc, argv, "b:c:f:hls:C:D:K:S:")) != -1) {
 		switch (opt) {
 			case 'b':
 				bps = atoi(optarg);
@@ -493,6 +495,9 @@ int main(int argc, char **argv)
 					key[cnt] = ascii_to_nibble(*endptr) << 4 | ascii_to_nibble(*(endptr+1));
 					endptr += 2;
 				}
+				break;
+			case 'S':
+				hmcfgusb_serial = optarg;
 				break;
 			case 'h':
 			case ':':
@@ -563,7 +568,7 @@ int main(int argc, char **argv)
 
 		hmcfgusb_set_debug(debug);
 
-		dev.hmcfgusb = hmcfgusb_init(parse_hmcfgusb, &rdata);
+		dev.hmcfgusb = hmcfgusb_init(parse_hmcfgusb, &rdata, hmcfgusb_serial);
 		if (!dev.hmcfgusb) {
 			fprintf(stderr, "Can't initialize HM-CFG-USB\n");
 			exit(EXIT_FAILURE);
@@ -608,7 +613,7 @@ int main(int argc, char **argv)
 						hmcfgusb_close(dev.hmcfgusb);
 					}
 					sleep(1);
-				} while (((dev.hmcfgusb = hmcfgusb_init(parse_hmcfgusb, &rdata)) == NULL) || (!dev.hmcfgusb->bootloader));
+				} while (((dev.hmcfgusb = hmcfgusb_init(parse_hmcfgusb, &rdata, hmcfgusb_serial)) == NULL) || (!dev.hmcfgusb->bootloader));
 			}
 
 			if (dev.hmcfgusb->bootloader) {
@@ -621,7 +626,7 @@ int main(int argc, char **argv)
 						hmcfgusb_close(dev.hmcfgusb);
 					}
 					sleep(1);
-				} while (((dev.hmcfgusb = hmcfgusb_init(parse_hmcfgusb, &rdata)) == NULL) || (dev.hmcfgusb->bootloader));
+				} while (((dev.hmcfgusb = hmcfgusb_init(parse_hmcfgusb, &rdata, hmcfgusb_serial)) == NULL) || (dev.hmcfgusb->bootloader));
 			}
 		}
 

@@ -214,6 +214,7 @@ void hmsniff_syntax(char *prog)
 	fprintf(stderr, "Syntax: %s options\n\n", prog);
 	fprintf(stderr, "Possible options:\n");
 	fprintf(stderr, "\t-f\t\tfast (100k/firmware update) mode\n");
+	fprintf(stderr, "\t-S serial\tuse HM-CFG-USB with given serial\n");
 	fprintf(stderr, "\t-v\t\tverbose mode\n");
 	fprintf(stderr, "\t-V\t\tshow version (" VERSION ")\n");
 
@@ -223,15 +224,19 @@ int main(int argc, char **argv)
 {
 	struct hmcfgusb_dev *dev;
 	struct recv_data rdata;
+	char *serial = NULL;
 	int quit = 0;
 	int speed = 10;
 	uint8_t speed_buf[2];
 	int opt;
 
-	while((opt = getopt(argc, argv, "fvV")) != -1) {
+	while((opt = getopt(argc, argv, "fS:vV")) != -1) {
 		switch (opt) {
 			case 'f':
 				speed = 100;
+				break;
+			case 'S':
+				serial = optarg;
 				break;
 			case 'v':
 				verbose = 1;
@@ -256,7 +261,7 @@ int main(int argc, char **argv)
 		memset(&rdata, 0, sizeof(rdata));
 		rdata.wrong_hmid = 0;
 
-		dev = hmcfgusb_init(parse_hmcfgusb, &rdata);
+		dev = hmcfgusb_init(parse_hmcfgusb, &rdata, serial);
 		if (!dev) {
 			fprintf(stderr, "Can't initialize HM-CFG-USB, retrying in 1s...\n");
 			sleep(1);
