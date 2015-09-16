@@ -72,7 +72,7 @@ int main(int argc, char **argv)
 	struct recv_data rdata;
 	uint16_t len;
 	struct firmware *fw;
-	char *serial = "ABC";
+	char *serial = NULL;
 	char *filename = NULL;
 	int block;
 	int pfd;
