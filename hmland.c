@@ -47,6 +47,7 @@
 
 #define PID_FILE "/var/run/hmland.pid"
 
+#define POLL_TIMEOUT_MS		250	/* Wake up device/bus at least once every 250ms */
 #define DEFAULT_REBOOT_SECONDS	86400
 #define LAN_READ_CHUNK_SIZE	2048
 /* Don't allow remote clients to consume all of our memory */
@@ -572,7 +573,7 @@ static int comm(int fd_in, int fd_out, int master_socket, int flags)
 	while(!quit) {
 		int fd;
 
-		fd = hmcfgusb_poll(dev, 1000);	/* Wakeup device/bus at least once a second */
+		fd = hmcfgusb_poll(dev, POLL_TIMEOUT_MS);
 		if (fd >= 0) {
 			if (fd == master_socket) {
 				int client;
