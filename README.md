@@ -102,9 +102,13 @@ you should upgrade to at least version 0.101.
      `./flash-ota -f hm_cc_rt_dn_update_V1_4_001_141020.eq3 -s KEQ0123456 -c /dev/ttyACM0`
 
 **Automatic firmware-updates:**  
-The options `-C`, `-D` and `-K` can be used to send a device to the
-bootloader automatically without manually rebooting the device while
-pressing buttons.
+The options `-C` (HMID of central), `-D` (HMID of device) and `-K` (AES key w/
+index) can be used to send a device to the bootloader automatically without
+manually rebooting the device while pressing buttons:
+
+`./flash-ota -f hm_cc_rt_dn_update_V1_4_001_141020.eq3 -C ABCDEF -D 012345 -K 01:00112233445566778899AABBCCDDEEFF`
+
+`-K` is only needed, when AES signing is active on the device.
 
 **Acknowledgments:**  
 flash-ota uses the public domain [AES implementation by Brad Conte][] to answer
