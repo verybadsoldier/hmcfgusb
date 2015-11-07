@@ -626,6 +626,7 @@ void sigterm_handler(int sig)
 
 #define FLAG_DAEMON	(1 << 0)
 #define FLAG_PID_FILE	(1 << 1)
+#define FLAG_LISTEN_ONCE	(1 << 2)
 
 static int socket_server(char *iface, int port, int flags)
 {
@@ -779,6 +780,10 @@ static int socket_server(char *iface, int port, int flags)
 				(client_addr & 0x00ff0000) >> 16,
 				(client_addr & 0x0000ff00) >> 8,
 				(client_addr & 0x000000ff));
+				
+		if (flags & FLAG_LISTEN_ONCE)
+			return EXIT_SUCCESS;
+			
 		sleep(1);
 	}
 
@@ -809,7 +814,7 @@ void hmlan_syntax(char *prog)
 	fprintf(stderr, "\t-r n\t\treboot HM-CFG-USB after n seconds (0: no reboot, default: %u if FW < 0.967, 0 otherwise)\n", DEFAULT_REBOOT_SECONDS);
 	fprintf(stderr, "\t   hh:mm\treboot HM-CFG-USB daily at hh:mm\n");
 	fprintf(stderr, "\t-S serial\tuse HM-CFG-USB with given serial (for multiple hmland instances)\n");
-	fprintf(stderr, "\t-v\t\tverbose mode\n");
+	fprintf(stderr, "\t-o\t\tlisten once: quit after first client\n");	fprintf(stderr, "\t-v\t\tverbose mode\n");
 	fprintf(stderr, "\t-V\t\tshow version (" VERSION ")\n");
 
 }
@@ -823,7 +828,7 @@ int main(int argc, char **argv)
 	char *ep;
 	int opt;
 	
-	while((opt = getopt(argc, argv, "DdhIiPp:Rr:l:L:S:vV")) != -1) {
+	while((opt = getopt(argc, argv, "DdhIioPp:Rr:l:L:S:vV")) != -1) {
 		switch (opt) {
 			case 'D':
 				debug = 1;
@@ -840,6 +845,9 @@ int main(int argc, char **argv)
 				break;
 			case 'P':
 				flags |= FLAG_PID_FILE;
+				break;
+			case 'o':
+				flags |= FLAG_LISTEN_ONCE;
 				break;
 			case 'p':
 				port = strtoul(optarg, &ep, 10);
