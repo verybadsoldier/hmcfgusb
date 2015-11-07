@@ -1,3 +1,15 @@
+hmcfgusb (0.102-1) unstable; urgency=low
+
+  * hmland: decrease poll-timeout to 250ms to improve performance
+    on Raspberry Pi
+  * all: allow HM-CFG-USB serial to be specified when using
+    multiple devices
+  * flash-ota: send device to bootloader automatically
+  * flash-ota: add workaround (-l) for cul-devices with little ram
+  * hmsniff: improve output
+
+ -- Michael Gernoth <michael@gernoth.net>  Sat, 7 Nov 2015 11:50:58 +0200
+
 hmcfgusb (0.101-1) unstable; urgency=low
 
   * Update to new hmland version
