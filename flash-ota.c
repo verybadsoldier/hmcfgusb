@@ -325,6 +325,7 @@ int send_hm_message(struct ota_dev *dev, struct recv_data *rdata, uint8_t *msg)
 											memcpy(&(rbuf[PAYLOAD]), resp, 16);
 											SET_LEN_FROM_PAYLOADLEN(rbuf, 16);
 
+											usleep(110000); /* Determined by a fair dice roll */
 											return send_hm_message(dev, rdata, rbuf);
 										}
 									}
