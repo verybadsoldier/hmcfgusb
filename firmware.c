@@ -1,6 +1,6 @@
 /* generic firmware-functions for HomeMatic
  *
- * Copyright (c) 2014 Michael Gernoth <michael@gernoth.net>
+ * Copyright (c) 2014-16 Michael Gernoth <michael@gernoth.net>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to

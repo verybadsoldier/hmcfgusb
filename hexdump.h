@@ -1,6 +1,6 @@
 /* simple hexdumper
  *
- * Copyright (c) 2004-2013 Michael Gernoth <michael@gernoth.net>
+ * Copyright (c) 2004-2016 Michael Gernoth <michael@gernoth.net>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to

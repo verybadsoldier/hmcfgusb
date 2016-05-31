@@ -1,6 +1,6 @@
 /* HM-sniffer for HM-CFG-USB
  *
- * Copyright (c) 2013-15 Michael Gernoth <michael@gernoth.net>
+ * Copyright (c) 2013-16 Michael Gernoth <michael@gernoth.net>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -243,7 +243,7 @@ int main(int argc, char **argv)
 				break;
 			case 'V':
 				printf("hmsniff " VERSION "\n");
-				printf("Copyright (c) 2013-15 Michael Gernoth\n\n");
+				printf("Copyright (c) 2013-16 Michael Gernoth\n\n");
 				exit(EXIT_SUCCESS);
 			case 'h':
 			case ':':
