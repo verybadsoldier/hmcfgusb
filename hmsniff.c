@@ -89,6 +89,9 @@ char *hm_message_types(uint8_t type, uint8_t subtype)
 		case 0x53:
 			return "Water sensor";
 			break;
+		case 0x54:
+			return "Gas sensor";
+			break;
 		case 0x58:
 			return "Climate event";
 			break;
@@ -96,6 +99,7 @@ char *hm_message_types(uint8_t type, uint8_t subtype)
 			return "Thermal control";
 			break;
 		case 0x5e:
+		case 0x5f:
 			return "Power event";
 			break;
 		case 0x70:
