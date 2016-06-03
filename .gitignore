@@ -20,6 +20,8 @@ hmland.o
 hmsniff
 hmsniff.d
 hmsniff.o
+hmuartlgw.d
+hmuartlgw.o
 util.d
 util.o
 *.enc

@@ -36,4 +36,17 @@
 #define SET_LEN_FROM_PAYLOADLEN(buf, payloadlen)	do { buf[0x00] = payloadlen + 0x09; } while(0)
 #define PAYLOADLEN(buf)					(buf[0x00] - 0x09)
 
+enum device_type {
+	DEVICE_TYPE_HMCFGUSB,
+	DEVICE_TYPE_CULFW,
+	DEVICE_TYPE_HMUARTLGW,
+};
+
+struct hm_dev {
+	int type;
+	struct hmcfgusb_dev *hmcfgusb;
+	struct culfw_dev *culfw;
+	struct hmuartlgw_dev *hmuartlgw;
+};
+
 uint8_t* hm_sign(uint8_t *key, uint8_t *challenge, uint8_t *m_frame, uint8_t *exp_auth, uint8_t *resp);

@@ -36,6 +36,8 @@
 #include "version.h"
 #include "hexdump.h"
 #include "hmcfgusb.h"
+#include "hmuartlgw.h"
+#include "hm.h"
 
 static int verbose = 0;
 
@@ -213,12 +215,39 @@ static int parse_hmcfgusb(uint8_t *buf, int buf_len, void *data)
 	return 1;
 }
 
+static int parse_hmuartlgw(enum hmuartlgw_dst dst, uint8_t *buf, int buf_len, void *data)
+{
+	if (dst == HMUARTLGW_OS) {
+		if ((buf[0] != HMUARTLGW_OS_ACK) ||
+		    (buf[1] != 0x01)) {
+			hexdump(buf, buf_len, "OS> ");
+		}
+		return 0;
+	}
+
+	if (dst != HMUARTLGW_APP) {
+		return 0;
+	}
+
+	switch(buf[0]) {
+		case HMUARTLGW_APP_RECV:
+			dissect_hm(buf + 3, buf_len - 3);
+		case HMUARTLGW_APP_ACK:
+			break;
+		default:
+			hexdump(buf, buf_len, "Unknown> ");
+	}
+
+	return 1;
+}
+
 void hmsniff_syntax(char *prog)
 {
 	fprintf(stderr, "Syntax: %s options\n\n", prog);
 	fprintf(stderr, "Possible options:\n");
 	fprintf(stderr, "\t-f\t\tfast (100k/firmware update) mode\n");
 	fprintf(stderr, "\t-S serial\tuse HM-CFG-USB with given serial\n");
+	fprintf(stderr, "\t-U device\tuse HM-MOD-UART on given device\n");
 	fprintf(stderr, "\t-v\t\tverbose mode\n");
 	fprintf(stderr, "\t-V\t\tshow version (" VERSION ")\n");
 
@@ -226,21 +255,28 @@ void hmsniff_syntax(char *prog)
 
 int main(int argc, char **argv)
 {
-	struct hmcfgusb_dev *dev;
+	struct hm_dev dev = { 0 };
 	struct recv_data rdata;
 	char *serial = NULL;
+	char *uart = NULL;
 	int quit = 0;
 	int speed = 10;
-	uint8_t speed_buf[2];
+	uint8_t buf[32];
 	int opt;
 
-	while((opt = getopt(argc, argv, "fS:vV")) != -1) {
+	dev.type = DEVICE_TYPE_HMCFGUSB;
+
+	while((opt = getopt(argc, argv, "fS:U:vV")) != -1) {
 		switch (opt) {
 			case 'f':
 				speed = 100;
 				break;
 			case 'S':
 				serial = optarg;
+				break;
+			case 'U':
+				uart = optarg;
+				dev.type = DEVICE_TYPE_HMUARTLGW;
 				break;
 			case 'v':
 				verbose = 1;
@@ -259,58 +295,109 @@ int main(int argc, char **argv)
 		}
 	}
 
-	hmcfgusb_set_debug(0);
+	if (dev.type == DEVICE_TYPE_HMCFGUSB) {
+		hmcfgusb_set_debug(0);
+	} else {
+		hmuartlgw_set_debug(0);
+	}
 
 	do {
 		memset(&rdata, 0, sizeof(rdata));
 		rdata.wrong_hmid = 0;
 
-		dev = hmcfgusb_init(parse_hmcfgusb, &rdata, serial);
-		if (!dev) {
-			fprintf(stderr, "Can't initialize HM-CFG-USB, retrying in 1s...\n");
-			sleep(1);
-			continue;
+		if (dev.type == DEVICE_TYPE_HMCFGUSB) {
+			dev.hmcfgusb = hmcfgusb_init(parse_hmcfgusb, &rdata, serial);
+			if (!dev.hmcfgusb) {
+				fprintf(stderr, "Can't initialize HM-CFG-USB, retrying in 1s...\n");
+				sleep(1);
+				continue;
+			}
+			printf("HM-CFG-USB opened!\n");
+
+			hmcfgusb_send_null_frame(dev.hmcfgusb, 1);
+			hmcfgusb_send(dev.hmcfgusb, (unsigned char*)"K", 1, 1);
+
+			hmcfgusb_send_null_frame(dev.hmcfgusb, 1);
+			buf[0] = 'G';
+			buf[1] = speed;
+			hmcfgusb_send(dev.hmcfgusb, buf, 2, 1);
+		} else {
+			dev.hmuartlgw = hmuart_init(uart, parse_hmuartlgw, &rdata);
+			if (!dev.hmuartlgw) {
+				fprintf(stderr, "Can't initialize HM-MOD-UART!\n");
+				exit(1);
+			}
+			printf("HM-MOD-UART opened!\n");
+
+			buf[0] = HMUARTLGW_APP_SET_HMID;
+			buf[1] = 0x00;
+			buf[2] = 0x00;
+			buf[3] = 0x00;
+			hmuartlgw_send(dev.hmuartlgw, buf, 4, HMUARTLGW_APP);
+			do { hmuartlgw_poll(dev.hmuartlgw, 500); } while (errno != ETIMEDOUT);
+			if (speed == 100) {
+				buf[0] = HMUARTLGW_OS_UPDATE_MODE;
+				buf[1] = 0xe9;
+				buf[2] = 0xca;
+				hmuartlgw_send(dev.hmuartlgw, buf, 3, HMUARTLGW_OS);
+			} else {
+				buf[0] = HMUARTLGW_OS_NORMAL_MODE;
+				hmuartlgw_send(dev.hmuartlgw, buf, 1, HMUARTLGW_OS);
+			}
 		}
-		printf("HM-CFG-USB opened!\n");
-
-		hmcfgusb_send_null_frame(dev, 1);
-		hmcfgusb_send(dev, (unsigned char*)"K", 1, 1);
-
-		hmcfgusb_send_null_frame(dev, 1);
-		speed_buf[0] = 'G';
-		speed_buf[1] = speed;
-		hmcfgusb_send(dev, speed_buf, 2, 1);
 
 		while(!quit) {
 			int fd;
 
 			if (rdata.wrong_hmid) {
 				printf("changing hmId to 000000, this might reboot the device!\n");
-				hmcfgusb_send(dev, (unsigned char*)"A\00\00\00", 4, 1);
-				rdata.wrong_hmid = 0;
-				hmcfgusb_send(dev, (unsigned char*)"K", 1, 1);
+				if (dev.type == DEVICE_TYPE_HMCFGUSB) {
+					hmcfgusb_send(dev.hmcfgusb, (unsigned char*)"A\00\00\00", 4, 1);
+					rdata.wrong_hmid = 0;
+					hmcfgusb_send(dev.hmcfgusb, (unsigned char*)"K", 1, 1);
+				} else {
+					buf[0] = HMUARTLGW_APP_SET_HMID;
+					buf[1] = 0x00;
+					buf[2] = 0x00;
+					buf[3] = 0x00;
+					hmuartlgw_send(dev.hmuartlgw, buf, 4, HMUARTLGW_APP);
+				}
 			}
-			fd = hmcfgusb_poll(dev, 1000);
+			if (dev.type == DEVICE_TYPE_HMCFGUSB) {
+				fd = hmcfgusb_poll(dev.hmcfgusb, 1000);
+			} else {
+				fd = hmuartlgw_poll(dev.hmuartlgw, 60000);
+			}
 			if (fd >= 0) {
 				fprintf(stderr, "activity on unknown fd %d!\n", fd);
 				continue;
 			} else if (fd == -1) {
 				if (errno) {
 					if (errno != ETIMEDOUT) {
-						perror("hmcfgusb_poll");
+						perror("hmsniff_poll");
 						break;
 					} else {
 						/* periodically wakeup the device */
-						hmcfgusb_send_null_frame(dev, 1);
+						if (dev.type == DEVICE_TYPE_HMCFGUSB) {
+							hmcfgusb_send_null_frame(dev.hmcfgusb, 1);
+						}
 					}
 				}
 			}
 		}
 
-		hmcfgusb_close(dev);
+		if (dev.type == DEVICE_TYPE_HMCFGUSB) {
+			if (dev.hmcfgusb)
+				hmcfgusb_close(dev.hmcfgusb);
+		} else {
+			if (dev.hmuartlgw)
+				hmuartlgw_close(dev.hmuartlgw);
+		}
 	} while (!quit);
 
-	hmcfgusb_exit();
+	if (dev.type == DEVICE_TYPE_HMCFGUSB) {
+		hmcfgusb_exit();
+	}
 
 	return EXIT_SUCCESS;
 }

@@ -41,6 +41,7 @@
 #include "version.h"
 #include "hmcfgusb.h"
 #include "culfw.h"
+#include "hmuartlgw.h"
 #include "util.h"
 
 #define MAX_RETRIES		5
@@ -57,20 +58,18 @@ int32_t kNo = -1;
 /* Maximum payloadlen supported by IO */
 uint32_t max_payloadlen = NORMAL_MAX_PAYLOAD;
 
-enum device_type {
-	DEVICE_TYPE_HMCFGUSB,
-	DEVICE_TYPE_CULFW,
-};
-
-struct ota_dev {
-	int type;
-	struct hmcfgusb_dev *hmcfgusb;
-	struct culfw_dev *culfw;
-};
-
 enum message_type {
 	MESSAGE_TYPE_E = 1,
 	MESSAGE_TYPE_R = 2,
+};
+
+enum hmuartlgw_state {
+	HMUARTLGW_STATE_GET_HMID,
+	HMUARTLGW_STATE_GET_FIRMWARE,
+	HMUARTLGW_STATE_GET_CREDITS,
+	HMUARTLGW_STATE_DONE,
+	HMUARTLGW_STATE_WAIT_APP,
+	HMUARTLGW_STATE_ACK_APP,
 };
 
 struct recv_data {
@@ -80,6 +79,8 @@ struct recv_data {
 	int speed;
 	uint16_t version;
 	uint8_t credits;
+	enum hmuartlgw_state uartlgw_state;
+	uint8_t uartlgw_version[3];
 };
 
 static int parse_hmcfgusb(uint8_t *buf, int buf_len, void *data)
@@ -205,7 +206,65 @@ static int parse_culfw(uint8_t *buf, int buf_len, void *data)
 	return 1;
 }
 
-int send_hm_message(struct ota_dev *dev, struct recv_data *rdata, uint8_t *msg)
+static int parse_hmuartlgw(enum hmuartlgw_dst dst, uint8_t *buf, int buf_len, void *data)
+{
+	struct recv_data *rdata = data;
+
+	if (dst == HMUARTLGW_OS) {
+		switch (rdata->uartlgw_state) {
+			case HMUARTLGW_STATE_GET_FIRMWARE:
+				if (buf[0] == HMUARTLGW_OS_ACK) {
+					rdata->uartlgw_version[0] = buf[5];
+					rdata->uartlgw_version[1] = buf[6];
+					rdata->uartlgw_version[2] = buf[7];
+					rdata->uartlgw_state = HMUARTLGW_STATE_DONE;
+				}
+				break;
+			case HMUARTLGW_STATE_GET_CREDITS:
+				if (buf[0] == HMUARTLGW_OS_ACK) {
+					rdata->credits = buf[2] / 2;
+					rdata->uartlgw_state = HMUARTLGW_STATE_DONE;
+				}
+				break;
+			default:
+				break;
+		}
+		return 0;
+	}
+
+	switch(buf[0]) {
+		case HMUARTLGW_APP_ACK:
+			if (rdata->uartlgw_state == HMUARTLGW_STATE_GET_HMID) {
+				my_hmid = (buf[4] << 16) | (buf[5] << 8) | buf[6];
+			}
+
+			rdata->status = buf[1];
+			rdata->message_type = MESSAGE_TYPE_R;
+			rdata->uartlgw_state = HMUARTLGW_STATE_ACK_APP;
+#if 0
+			hexdump(buf, buf_len, "ACK Status: ");
+#endif
+
+			break;
+		case HMUARTLGW_APP_RECV:
+			if ((!hmid) ||
+			    ((buf[7] == ((hmid >> 16) & 0xff)) &&
+			    (buf[8] == ((hmid >> 8) & 0xff)) &&
+			    (buf[9] == (hmid & 0xff)))) {
+				memset(rdata->message, 0, sizeof(rdata->message));
+				memcpy(rdata->message + 1, buf + 4, buf_len - 4);
+				rdata->message[LEN] = buf_len - 4;
+				rdata->message_type = MESSAGE_TYPE_E;
+			}
+			break;
+		default:
+			break;
+	}
+
+	return 1;
+}
+
+int send_hm_message(struct hm_dev *dev, struct recv_data *rdata, uint8_t *msg)
 {
 	static uint32_t id = 1;
 	struct timeval tv;
@@ -351,13 +410,52 @@ int send_hm_message(struct ota_dev *dev, struct recv_data *rdata, uint8_t *msg)
 				}
 			}
 			break;
+		case DEVICE_TYPE_HMUARTLGW:
+			memset(out, 0, sizeof(out));
+
+			out[0] = HMUARTLGW_APP_SEND;
+			out[1] = 0x00;
+			out[2] = 0x00;
+			out[3] = (msg[CTL] & 0x10) ? 0x01 : 0x00; /* Burst?! */
+			memcpy(&out[4], &msg[1], msg[0]);
+
+			memset(rdata, 0, sizeof(struct recv_data));
+			hmuartlgw_send(dev->hmuartlgw, out, msg[0] + 4, HMUARTLGW_APP);
+
+			while (1) {
+				if (rdata->message_type == MESSAGE_TYPE_R) {
+					if ((rdata->status == 0x02) ||
+					    (rdata->status == 0x03) ||
+					    (rdata->status == 0x0c)) {
+						break;
+					} else {
+						if (rdata->status == 0x0d) {
+							fprintf(stderr, "\nAES handshake failed!\n");
+						} else if (rdata->status == 0x04 || rdata->status == 0x06) {
+							fprintf(stderr, "\nMissing ACK!\n");
+						} else {
+							fprintf(stderr, "\nInvalid status: %04x\n", rdata->status);
+						}
+						return 0;
+					}
+				}
+				errno = 0;
+				pfd = hmuartlgw_poll(dev->hmuartlgw, 1000);
+				if ((pfd < 0) && errno) {
+					if (errno != ETIMEDOUT) {
+						perror("\n\nhmcfgusb_poll");
+						exit(EXIT_FAILURE);
+					}
+				}
+			}
+			break;
 	}
 
 	id++;
 	return 1;
 }
 
-static int switch_speed(struct ota_dev *dev, struct recv_data *rdata, uint8_t speed)
+static int switch_speed(struct hm_dev *dev, struct recv_data *rdata, uint8_t speed)
 {
 	uint8_t out[0x40];
 	int pfd;
@@ -392,6 +490,17 @@ static int switch_speed(struct ota_dev *dev, struct recv_data *rdata, uint8_t sp
 				return culfw_send(dev->culfw, "Ar\r\n", 4);
 			}
 			break;
+		case DEVICE_TYPE_HMUARTLGW:
+			if (speed == 100) {
+				out[0] = HMUARTLGW_OS_UPDATE_MODE;
+				out[1] = 0xe9;
+				out[2] = 0xca;
+				hmuartlgw_send(dev->hmuartlgw, out, 3, HMUARTLGW_OS);
+			} else {
+				out[0] = HMUARTLGW_OS_NORMAL_MODE;
+				hmuartlgw_send(dev->hmuartlgw, out, 1, HMUARTLGW_OS);
+			}
+			break;
 	}
 
 	return 1;
@@ -408,6 +517,7 @@ void flash_ota_syntax(char *prog)
 	fprintf(stderr, "\t-b bps\t\tuse CUL with speed \"bps\" (default: %u)\n", DEFAULT_CUL_BPS);
 	fprintf(stderr, "\t-l\t\tlower payloadlen (required for devices with little RAM, e.g. CUL v2 and CUL v4)\n");
 	fprintf(stderr, "\t-S serial\tuse HM-CFG-USB with given serial\n");
+	fprintf(stderr, "\t-U device\tuse HM-MOD-UART on given device\n");
 	fprintf(stderr, "\t-h\t\tthis help\n");
 	fprintf(stderr, "\nOptional parameters for automatically sending device to bootloader\n");
 	fprintf(stderr, "\t-C\t\tHMID of central (3 hex-bytes, no prefix, e.g. ABCDEF)\n");
@@ -424,7 +534,7 @@ int main(int argc, char **argv)
 	char *culfw_dev = NULL;
 	char *endptr = NULL;
 	unsigned int bps = DEFAULT_CUL_BPS;
-	struct ota_dev dev;
+	struct hm_dev dev;
 	struct recv_data rdata;
 	uint8_t out[0x40];
 	uint8_t *pos;
@@ -432,6 +542,7 @@ int main(int argc, char **argv)
 	uint16_t len;
 	struct firmware *fw;
 	char *hmcfgusb_serial = NULL;
+	char *uart = NULL;
 	int block;
 	int pfd;
 	int debug = 0;
@@ -443,7 +554,7 @@ int main(int argc, char **argv)
 
 	printf("HomeMatic OTA flasher version " VERSION "\n\n");
 
-	while((opt = getopt(argc, argv, "b:c:f:hls:C:D:K:S:")) != -1) {
+	while((opt = getopt(argc, argv, "b:c:f:hls:C:D:K:S:U:")) != -1) {
 		switch (opt) {
 			case 'b':
 				bps = atoi(optarg);
@@ -500,6 +611,9 @@ int main(int argc, char **argv)
 			case 'S':
 				hmcfgusb_serial = optarg;
 				break;
+			case 'U':
+				uart = optarg;
+				break;
 			case 'h':
 			case ':':
 			case '?':
@@ -521,7 +635,7 @@ int main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 
 	memset(&rdata, 0, sizeof(rdata));
-	memset(&dev, 0, sizeof(struct ota_dev));
+	memset(&dev, 0, sizeof(struct hm_dev));
 
 	if (culfw_dev) {
 		printf("Opening culfw-device at path %s with speed %u\n", culfw_dev, bps);
@@ -563,6 +677,95 @@ int main(int argc, char **argv)
 		if (rdata.version < 0x013a) {
 			fprintf(stderr, "\nThis version does _not_ support firmware upgrade mode, you need at least 1.58!\n");
 			exit(EXIT_FAILURE);
+		}
+	} else if (uart) {
+		uint32_t new_hmid = my_hmid;
+
+		hmuartlgw_set_debug(debug);
+
+		dev.hmuartlgw = hmuart_init(uart, parse_hmuartlgw, &rdata);
+		if (!dev.hmuartlgw) {
+			fprintf(stderr, "Can't initialize HM-MOD-UART\n");
+			exit(EXIT_FAILURE);
+		}
+		dev.type = DEVICE_TYPE_HMUARTLGW;
+
+		out[0] = HMUARTLGW_APP_GET_HMID;
+		do {
+			rdata.uartlgw_state = HMUARTLGW_STATE_GET_HMID;
+			hmuartlgw_send(dev.hmuartlgw, out, 1, HMUARTLGW_APP);
+			do { hmuartlgw_poll(dev.hmuartlgw, 500); } while (rdata.uartlgw_state != HMUARTLGW_STATE_ACK_APP);
+		} while (rdata.status == 0x08);
+
+		out[0] = HMUARTLGW_OS_GET_FIRMWARE;
+		do {
+			rdata.uartlgw_state = HMUARTLGW_STATE_GET_FIRMWARE;
+			hmuartlgw_send(dev.hmuartlgw, out, 1, HMUARTLGW_OS);
+			do { hmuartlgw_poll(dev.hmuartlgw, 500); } while (rdata.uartlgw_state != HMUARTLGW_STATE_DONE);
+		} while (rdata.status == 0x08);
+
+		out[0] = HMUARTLGW_OS_GET_CREDITS;
+		do {
+			rdata.uartlgw_state = HMUARTLGW_STATE_GET_CREDITS;
+			hmuartlgw_send(dev.hmuartlgw, out, 1, HMUARTLGW_OS);
+			do { hmuartlgw_poll(dev.hmuartlgw, 500); } while (rdata.uartlgw_state != HMUARTLGW_STATE_DONE);
+		} while (rdata.status == 0x08);
+
+		printf("HM-MOD-UART firmware version: %u.%u.%u, used credits: %u%%\n",
+			rdata.uartlgw_version[0],
+			rdata.uartlgw_version[1],
+			rdata.uartlgw_version[2],
+			rdata.credits);
+
+		if (rdata.credits >= 40) {
+			printf("\nRebooting HM-MOD-UART to avoid running out of credits\n");
+
+			hmuartlgw_enter_bootloader(dev.hmuartlgw);
+			hmuartlgw_enter_app(dev.hmuartlgw);
+		}
+
+		printf("\nHM-MOD-UART opened\n\n");
+
+		if (new_hmid && (my_hmid != new_hmid)) {
+			printf("Changing hmid from %06x to %06x\n", my_hmid, new_hmid);
+
+			out[0] = HMUARTLGW_APP_SET_HMID;
+			out[1] = (new_hmid >> 16) & 0xff;
+			out[2] = (new_hmid >> 8) & 0xff;
+			out[3] = new_hmid & 0xff;
+			do {
+				rdata.uartlgw_state = HMUARTLGW_STATE_WAIT_APP;
+				hmuartlgw_send(dev.hmuartlgw, out, 4, HMUARTLGW_APP);
+				do { hmuartlgw_poll(dev.hmuartlgw, 500); } while (rdata.uartlgw_state != HMUARTLGW_STATE_ACK_APP);
+			} while (rdata.status == 0x08);
+
+			my_hmid = new_hmid;
+		}
+
+		if (kNo > 0) {
+			printf("Setting AES-key\n");
+
+			memset(out, 0, sizeof(out));
+			out[0] = HMUARTLGW_APP_SET_CURRENT_KEY;
+			memcpy(&(out[1]), key, 16);
+			out[17] = kNo;
+
+			do {
+				rdata.uartlgw_state = HMUARTLGW_STATE_WAIT_APP;
+				hmuartlgw_send(dev.hmuartlgw, out, 18, HMUARTLGW_APP);
+				do { hmuartlgw_poll(dev.hmuartlgw, 500); } while (rdata.uartlgw_state != HMUARTLGW_STATE_ACK_APP);
+			} while (rdata.status == 0x08);
+
+			memset(out, 0, sizeof(out));
+			out[0] = HMUARTLGW_APP_SET_OLD_KEY;
+			memcpy(&(out[1]), key, 16);
+			out[17] = kNo;
+
+			do {
+				rdata.uartlgw_state = HMUARTLGW_STATE_WAIT_APP;
+				hmuartlgw_send(dev.hmuartlgw, out, 18, HMUARTLGW_APP);
+				do { hmuartlgw_poll(dev.hmuartlgw, 500); } while (rdata.uartlgw_state != HMUARTLGW_STATE_ACK_APP);
+			} while (rdata.status == 0x08);
 		}
 	} else {
 		uint32_t new_hmid = my_hmid;
@@ -680,6 +883,38 @@ int main(int argc, char **argv)
 	}
 
 	if (hmid && my_hmid) {
+		switch (dev.type) {
+			case DEVICE_TYPE_HMCFGUSB:
+				printf("Adding HMID\n");
+
+				memset(out, 0, sizeof(out));
+				out[0] = '+';
+				out[1] = (hmid >> 16) & 0xff;
+				out[2] = (hmid >> 8) & 0xff;
+				out[3] = hmid & 0xff;
+
+				hmcfgusb_send(dev.hmcfgusb, out, sizeof(out), 1);
+				break;
+			case DEVICE_TYPE_HMUARTLGW:
+				printf("Adding HMID\n");
+
+				memset(out, 0, sizeof(out));
+				out[0] = HMUARTLGW_APP_ADD_PEER;
+				out[1] = (hmid >> 16) & 0xff;
+				out[2] = (hmid >> 8) & 0xff;
+				out[3] = hmid & 0xff;
+				out[4] = (kNo > 0) ? kNo : 0x00; /* KeyIndex */
+				out[5] = 0x00; /* WakeUp? */
+				out[6] = 0x00; /* WakeUp? */
+
+				do {
+					rdata.uartlgw_state = HMUARTLGW_STATE_WAIT_APP;
+					hmuartlgw_send(dev.hmuartlgw, out, 7, HMUARTLGW_APP);
+					do { hmuartlgw_poll(dev.hmuartlgw, 500); } while (rdata.uartlgw_state != HMUARTLGW_STATE_ACK_APP);
+				} while (rdata.status == 0x08);
+
+				break;
+		}
 		printf("Sending device with hmid %06x to bootloader\n", hmid);
 		out[CTL] = 0x30;
 		out[TYPE] = 0x11;
@@ -713,8 +948,13 @@ int main(int argc, char **argv)
 				pfd = culfw_poll(dev.culfw, 1000);
 				break;
 			case DEVICE_TYPE_HMCFGUSB:
-			default:
 				pfd = hmcfgusb_poll(dev.hmcfgusb, 1000);
+				break;
+			case DEVICE_TYPE_HMUARTLGW:
+				pfd = hmuartlgw_poll(dev.hmuartlgw, 1000);
+				break;
+			default:
+				pfd = -1;
 				break;
 		}
 
@@ -743,16 +983,37 @@ int main(int argc, char **argv)
 
 	printf("Device with serial %s (HMID: %06x) entered firmware-update-mode\n", serial, hmid);
 
-	if (dev.type == DEVICE_TYPE_HMCFGUSB) {
-		printf("Adding HMID\n");
+	switch (dev.type) {
+		case DEVICE_TYPE_HMCFGUSB:
+			printf("Adding HMID\n");
 
-		memset(out, 0, sizeof(out));
-		out[0] = '+';
-		out[1] = (hmid >> 16) & 0xff;
-		out[2] = (hmid >> 8) & 0xff;
-		out[3] = hmid & 0xff;
+			memset(out, 0, sizeof(out));
+			out[0] = '+';
+			out[1] = (hmid >> 16) & 0xff;
+			out[2] = (hmid >> 8) & 0xff;
+			out[3] = hmid & 0xff;
 
-		hmcfgusb_send(dev.hmcfgusb, out, sizeof(out), 1);
+			hmcfgusb_send(dev.hmcfgusb, out, sizeof(out), 1);
+			break;
+		case DEVICE_TYPE_HMUARTLGW:
+			printf("Adding HMID\n");
+
+			memset(out, 0, sizeof(out));
+			out[0] = HMUARTLGW_APP_ADD_PEER;
+			out[1] = (hmid >> 16) & 0xff;
+			out[2] = (hmid >> 8) & 0xff;
+			out[3] = hmid & 0xff;
+			out[4] = 0x00; /* KeyIndex */
+			out[5] = 0x00; /* WakeUp? */
+			out[6] = 0x00; /* WakeUp? */
+
+			do {
+				rdata.uartlgw_state = HMUARTLGW_STATE_WAIT_APP;
+				hmuartlgw_send(dev.hmuartlgw, out, 7, HMUARTLGW_APP);
+				do { hmuartlgw_poll(dev.hmuartlgw, 500); } while (rdata.uartlgw_state != HMUARTLGW_STATE_ACK_APP);
+			} while (rdata.status == 0x08);
+
+			break;
 	}
 
 	switchcnt = 3;
@@ -904,8 +1165,11 @@ int main(int argc, char **argv)
 	}
 
 	printf("Waiting for device to reboot\n");
+	rdata.message_type = MESSAGE_TYPE_R;
 
 	cnt = 10;
+	if (dev.type == DEVICE_TYPE_HMUARTLGW)
+		cnt = 200; /* FIXME */
 	do {
 		errno = 0;
 		switch(dev.type) {
@@ -913,8 +1177,13 @@ int main(int argc, char **argv)
 				pfd = culfw_poll(dev.culfw, 1000);
 				break;
 			case DEVICE_TYPE_HMCFGUSB:
-			default:
 				pfd = hmcfgusb_poll(dev.hmcfgusb, 1000);
+				break;
+			case DEVICE_TYPE_HMUARTLGW:
+				pfd = hmuartlgw_poll(dev.hmuartlgw, 1000);
+				break;
+			default:
+				pfd = -1;
 				break;
 		}
 		if ((pfd < 0) && errno) {
