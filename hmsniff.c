@@ -231,6 +231,7 @@ static int parse_hmuartlgw(enum hmuartlgw_dst dst, uint8_t *buf, int buf_len, vo
 
 	switch(buf[0]) {
 		case HMUARTLGW_APP_RECV:
+			buf[3] = buf_len - 4;
 			dissect_hm(buf + 3, buf_len - 3);
 		case HMUARTLGW_APP_ACK:
 			break;
