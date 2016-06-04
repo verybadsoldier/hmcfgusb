@@ -39,7 +39,7 @@
 
 #define HMUARTLGW_INIT_TIMEOUT	10000
 
-#define HMUARTLGW_SETTLE_TIME	2
+#define HMUARTLGW_SETTLE_TIME	1
 
 static int debug = 0;
 
@@ -106,7 +106,7 @@ static int hmuartlgw_init_parse(enum hmuartlgw_dst dst, uint8_t *buf, int buf_le
 
 	switch(rdata->state) {
 		case HMUARTLGW_QUERY_APPSTATE:
-			if ((buf[0] == 0x04) && (buf[1] == 0x02)) {
+			if ((buf[0] == HMUARTLGW_OS_ACK) && (buf[1] == 0x02)) {
 				if (!strncmp(((char*)buf)+2, "Co_CPU_BL", 9)) {
 					rdata->state = HMUARTLGW_BOOTLOADER;
 				} else if (!strncmp(((char*)buf)+2, "Co_CPU_App", 10)) {
@@ -116,7 +116,7 @@ static int hmuartlgw_init_parse(enum hmuartlgw_dst dst, uint8_t *buf, int buf_le
 			break;
 		case HMUARTLGW_ENTER_BOOTLOADER:
 			if ((buf_len == 2) &&
-			    (buf[0] == 0x04) &&
+			    (buf[0] == HMUARTLGW_OS_ACK) &&
 			    (buf[1] == 0x01)) {
 				rdata->state = HMUARTLGW_ENTER_BOOTLOADER_ACK;
 			}
@@ -126,7 +126,7 @@ static int hmuartlgw_init_parse(enum hmuartlgw_dst dst, uint8_t *buf, int buf_le
 			break;
 		case HMUARTLGW_ENTER_APPLICATION:
 			if ((buf_len == 2) &&
-			    (buf[0] == 0x04) &&
+			    (buf[0] == HMUARTLGW_OS_ACK) &&
 			    (buf[1] == 0x01)) {
 				rdata->state = HMUARTLGW_ENTER_APPLICATION_ACK;
 			}
