@@ -264,6 +264,28 @@ static int parse_hmuartlgw(enum hmuartlgw_dst dst, uint8_t *buf, int buf_len, vo
 	return 1;
 }
 
+int send_wait_hmuartlgw(struct hm_dev *dev, struct recv_data *rdata, uint8_t *data, int data_len,
+                        enum hmuartlgw_dst dst, enum hmuartlgw_state srcstate,
+			enum hmuartlgw_state dststate)
+{
+	int cnt = 5;
+
+	do {
+		rdata->uartlgw_state = srcstate;
+		hmuartlgw_send(dev->hmuartlgw, data, data_len, dst);
+		do { hmuartlgw_poll(dev->hmuartlgw, 500); } while (rdata->uartlgw_state != dststate);
+		if (rdata->status != HMUARTLGW_ACK_EINPROGRESS)
+			break;
+		usleep(200*1000);
+	} while (cnt--);
+	if (rdata->status == HMUARTLGW_ACK_EINPROGRESS) {
+		fprintf(stderr, "IO thinks it is busy, you might have to reset it!\n");
+		return 0;
+	}
+
+	return 1;
+}
+
 int send_hm_message(struct hm_dev *dev, struct recv_data *rdata, uint8_t *msg)
 {
 	static uint32_t id = 1;
@@ -682,6 +704,7 @@ int main(int argc, char **argv)
 		uint32_t new_hmid = my_hmid;
 
 		hmuartlgw_set_debug(debug);
+		hmuartlgw_set_debug(1);
 
 		dev.hmuartlgw = hmuart_init(uart, parse_hmuartlgw, &rdata);
 		if (!dev.hmuartlgw) {
@@ -691,25 +714,13 @@ int main(int argc, char **argv)
 		dev.type = DEVICE_TYPE_HMUARTLGW;
 
 		out[0] = HMUARTLGW_APP_GET_HMID;
-		do {
-			rdata.uartlgw_state = HMUARTLGW_STATE_GET_HMID;
-			hmuartlgw_send(dev.hmuartlgw, out, 1, HMUARTLGW_APP);
-			do { hmuartlgw_poll(dev.hmuartlgw, 500); } while (rdata.uartlgw_state != HMUARTLGW_STATE_ACK_APP);
-		} while (rdata.status == 0x08);
+		send_wait_hmuartlgw(&dev, &rdata, out, 1, HMUARTLGW_APP, HMUARTLGW_STATE_GET_HMID, HMUARTLGW_STATE_ACK_APP);
 
 		out[0] = HMUARTLGW_OS_GET_FIRMWARE;
-		do {
-			rdata.uartlgw_state = HMUARTLGW_STATE_GET_FIRMWARE;
-			hmuartlgw_send(dev.hmuartlgw, out, 1, HMUARTLGW_OS);
-			do { hmuartlgw_poll(dev.hmuartlgw, 500); } while (rdata.uartlgw_state != HMUARTLGW_STATE_DONE);
-		} while (rdata.status == 0x08);
+		send_wait_hmuartlgw(&dev, &rdata, out, 1, HMUARTLGW_OS, HMUARTLGW_STATE_GET_FIRMWARE, HMUARTLGW_STATE_DONE);
 
 		out[0] = HMUARTLGW_OS_GET_CREDITS;
-		do {
-			rdata.uartlgw_state = HMUARTLGW_STATE_GET_CREDITS;
-			hmuartlgw_send(dev.hmuartlgw, out, 1, HMUARTLGW_OS);
-			do { hmuartlgw_poll(dev.hmuartlgw, 500); } while (rdata.uartlgw_state != HMUARTLGW_STATE_DONE);
-		} while (rdata.status == 0x08);
+		send_wait_hmuartlgw(&dev, &rdata, out, 1, HMUARTLGW_OS, HMUARTLGW_STATE_GET_CREDITS, HMUARTLGW_STATE_DONE);
 
 		printf("HM-MOD-UART firmware version: %u.%u.%u, used credits: %u%%\n",
 			rdata.uartlgw_version[0],
@@ -733,11 +744,7 @@ int main(int argc, char **argv)
 			out[1] = (new_hmid >> 16) & 0xff;
 			out[2] = (new_hmid >> 8) & 0xff;
 			out[3] = new_hmid & 0xff;
-			do {
-				rdata.uartlgw_state = HMUARTLGW_STATE_WAIT_APP;
-				hmuartlgw_send(dev.hmuartlgw, out, 4, HMUARTLGW_APP);
-				do { hmuartlgw_poll(dev.hmuartlgw, 500); } while (rdata.uartlgw_state != HMUARTLGW_STATE_ACK_APP);
-			} while (rdata.status == 0x08);
+			send_wait_hmuartlgw(&dev, &rdata, out, 4, HMUARTLGW_APP, HMUARTLGW_STATE_WAIT_APP, HMUARTLGW_STATE_ACK_APP);
 
 			my_hmid = new_hmid;
 		}
@@ -749,23 +756,13 @@ int main(int argc, char **argv)
 			out[0] = HMUARTLGW_APP_SET_CURRENT_KEY;
 			memcpy(&(out[1]), key, 16);
 			out[17] = kNo;
-
-			do {
-				rdata.uartlgw_state = HMUARTLGW_STATE_WAIT_APP;
-				hmuartlgw_send(dev.hmuartlgw, out, 18, HMUARTLGW_APP);
-				do { hmuartlgw_poll(dev.hmuartlgw, 500); } while (rdata.uartlgw_state != HMUARTLGW_STATE_ACK_APP);
-			} while (rdata.status == 0x08);
+			send_wait_hmuartlgw(&dev, &rdata, out, 18, HMUARTLGW_APP, HMUARTLGW_STATE_WAIT_APP, HMUARTLGW_STATE_ACK_APP);
 
 			memset(out, 0, sizeof(out));
 			out[0] = HMUARTLGW_APP_SET_OLD_KEY;
 			memcpy(&(out[1]), key, 16);
 			out[17] = kNo;
-
-			do {
-				rdata.uartlgw_state = HMUARTLGW_STATE_WAIT_APP;
-				hmuartlgw_send(dev.hmuartlgw, out, 18, HMUARTLGW_APP);
-				do { hmuartlgw_poll(dev.hmuartlgw, 500); } while (rdata.uartlgw_state != HMUARTLGW_STATE_ACK_APP);
-			} while (rdata.status == 0x08);
+			send_wait_hmuartlgw(&dev, &rdata, out, 18, HMUARTLGW_APP, HMUARTLGW_STATE_WAIT_APP, HMUARTLGW_STATE_ACK_APP);
 		}
 	} else {
 		uint32_t new_hmid = my_hmid;
@@ -907,11 +904,7 @@ int main(int argc, char **argv)
 				out[5] = 0x00; /* WakeUp? */
 				out[6] = 0x00; /* WakeUp? */
 
-				do {
-					rdata.uartlgw_state = HMUARTLGW_STATE_WAIT_APP;
-					hmuartlgw_send(dev.hmuartlgw, out, 7, HMUARTLGW_APP);
-					do { hmuartlgw_poll(dev.hmuartlgw, 500); } while (rdata.uartlgw_state != HMUARTLGW_STATE_ACK_APP);
-				} while (rdata.status == 0x08);
+				send_wait_hmuartlgw(&dev, &rdata, out, 7, HMUARTLGW_APP, HMUARTLGW_STATE_WAIT_APP, HMUARTLGW_STATE_ACK_APP);
 
 				break;
 		}
@@ -1007,11 +1000,7 @@ int main(int argc, char **argv)
 			out[5] = 0x00; /* WakeUp? */
 			out[6] = 0x00; /* WakeUp? */
 
-			do {
-				rdata.uartlgw_state = HMUARTLGW_STATE_WAIT_APP;
-				hmuartlgw_send(dev.hmuartlgw, out, 7, HMUARTLGW_APP);
-				do { hmuartlgw_poll(dev.hmuartlgw, 500); } while (rdata.uartlgw_state != HMUARTLGW_STATE_ACK_APP);
-			} while (rdata.status == 0x08);
+			send_wait_hmuartlgw(&dev, &rdata, out, 7, HMUARTLGW_APP, HMUARTLGW_STATE_WAIT_APP, HMUARTLGW_STATE_ACK_APP);
 
 			break;
 	}
