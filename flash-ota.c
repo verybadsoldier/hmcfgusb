@@ -704,7 +704,6 @@ int main(int argc, char **argv)
 		uint32_t new_hmid = my_hmid;
 
 		hmuartlgw_set_debug(debug);
-		hmuartlgw_set_debug(1);
 
 		dev.hmuartlgw = hmuart_init(uart, parse_hmuartlgw, &rdata);
 		if (!dev.hmuartlgw) {
