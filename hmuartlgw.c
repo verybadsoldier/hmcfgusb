@@ -413,10 +413,8 @@ int hmuartlgw_poll(struct hmuartlgw_dev *dev, int timeout)
 		return -1;
 	}
 
-	crc = crc16(dev->buf, dev->pos - 2);
-	if ((((crc >> 8) & 0xff) == dev->buf[dev->pos - 2]) &&
-			((crc & 0xff) == dev->buf[dev->pos - 1])) {
-
+	crc = crc16(dev->buf, dev->pos);
+	if (crc == 0x0000) {
 		if (debug)
 			hexdump(dev->buf, dev->pos, "UARTLGW > ");
 
