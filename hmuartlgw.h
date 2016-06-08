@@ -25,6 +25,7 @@
 #define HMUARTLGW_OS_GET_FIRMWARE	0x02
 #define HMUARTLGW_OS_CHANGE_APP		0x03
 #define HMUARTLGW_OS_ACK		0x04
+#define HMUARTLGW_OS_UPDATE_FIRMWARE	0x05
 #define HMUARTLGW_OS_UNSOL_CREDITS	0x05
 #define HMUARTLGW_OS_NORMAL_MODE	0x06
 #define HMUARTLGW_OS_UPDATE_MODE	0x07
@@ -65,7 +66,7 @@ struct hmuartlgw_dev {
 	int unescape_next;
 };
 
-struct hmuartlgw_dev *hmuart_init(char *device, hmuartlgw_cb_fn cb, void *data);
+struct hmuartlgw_dev *hmuart_init(char *device, hmuartlgw_cb_fn cb, void *data, int app);
 struct hmuartlgw_dev *hmlgw_init(char *device, hmuartlgw_cb_fn cb, void *data);
 int hmuartlgw_send_raw(struct hmuartlgw_dev *dev, uint8_t *frame, int framelen);
 int hmuartlgw_send(struct hmuartlgw_dev *dev, uint8_t *cmd, int cmdlen, enum hmuartlgw_dst dst);

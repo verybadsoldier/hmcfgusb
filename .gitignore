@@ -5,6 +5,9 @@ culfw.o
 flash-hmcfgusb
 flash-hmcfgusb.d
 flash-hmcfgusb.o
+flash-hmmoduart
+flash-hmmoduart.d
+flash-hmmoduart.o
 flash-ota
 flash-ota.d
 flash-ota.o

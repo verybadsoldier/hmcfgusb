@@ -705,7 +705,7 @@ int main(int argc, char **argv)
 
 		hmuartlgw_set_debug(debug);
 
-		dev.hmuartlgw = hmuart_init(uart, parse_hmuartlgw, &rdata);
+		dev.hmuartlgw = hmuart_init(uart, parse_hmuartlgw, &rdata, 1);
 		if (!dev.hmuartlgw) {
 			fprintf(stderr, "Can't initialize HM-MOD-UART\n");
 			exit(EXIT_FAILURE);

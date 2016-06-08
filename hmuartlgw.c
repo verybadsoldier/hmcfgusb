@@ -142,7 +142,7 @@ static int hmuartlgw_init_parse(enum hmuartlgw_dst dst, uint8_t *buf, int buf_le
         return 1;
 }
 
-struct hmuartlgw_dev *hmuart_init(char *device, hmuartlgw_cb_fn cb, void *data)
+struct hmuartlgw_dev *hmuart_init(char *device, hmuartlgw_cb_fn cb, void *data, int app)
 {
 	struct hmuartlgw_dev *dev = NULL;
 	struct termios oldtio, tio;
@@ -191,7 +191,11 @@ struct hmuartlgw_dev *hmuart_init(char *device, hmuartlgw_cb_fn cb, void *data)
 
 	hmuartlgw_flush(dev);
 
-	hmuartlgw_enter_app(dev);
+	if (app) {
+		hmuartlgw_enter_app(dev);
+	} else {
+		hmuartlgw_enter_bootloader(dev);
+	}
 
 	dev->cb = cb;
 	dev->cb_data = data;
@@ -329,7 +333,7 @@ int hmuartlgw_send_raw(struct hmuartlgw_dev *dev, uint8_t *frame, int framelen)
 int hmuartlgw_send(struct hmuartlgw_dev *dev, uint8_t *cmd, int cmdlen, enum hmuartlgw_dst dst)
 {
 	static uint8_t cnt = 0;
-	uint8_t frame[1024] = { 0 };
+	uint8_t frame[4096] = { 0 };
 	uint16_t crc;
 
 	frame[0] = 0xfd;

@@ -323,7 +323,7 @@ int main(int argc, char **argv)
 			buf[1] = speed;
 			hmcfgusb_send(dev.hmcfgusb, buf, 2, 1);
 		} else {
-			dev.hmuartlgw = hmuart_init(uart, parse_hmuartlgw, &rdata);
+			dev.hmuartlgw = hmuart_init(uart, parse_hmuartlgw, &rdata, 1);
 			if (!dev.hmuartlgw) {
 				fprintf(stderr, "Can't initialize HM-MOD-UART!\n");
 				exit(1);

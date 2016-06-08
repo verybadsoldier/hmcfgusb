@@ -37,7 +37,7 @@
 #include "firmware.h"
 
 /* This might be wrong, but it works for current fw */
-#define MAX_BLOCK_LENGTH	512
+#define MAX_BLOCK_LENGTH	2048
 
 struct firmware* firmware_read_firmware(char *filename, int debug)
 {
