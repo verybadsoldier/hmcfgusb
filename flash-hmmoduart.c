@@ -177,7 +177,7 @@ int main(int argc, char **argv)
 		} while (pfd < 0);
 
 		if (rdata.ack != 0x0401) {
-			fprintf(stderr, "\n\nError flashing block %d, status: %u\n", block, rdata.ack);
+			fprintf(stderr, "\n\nError flashing block %d, status: %04x\n", block, rdata.ack);
 			exit(EXIT_FAILURE);
 		}
 
