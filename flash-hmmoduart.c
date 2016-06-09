@@ -1,6 +1,6 @@
-/* flasher for HM-CFG-USB
+/* flasher for HM-MOD-UART
  *
- * Copyright (c) 2013-16 Michael Gernoth <michael@gernoth.net>
+ * Copyright (c) 2016 Michael Gernoth <michael@gernoth.net>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -61,7 +61,7 @@ void flash_hmmoduart_syntax(char *prog)
 	fprintf(stderr, "Syntax: %s [options] -U /dev/ttyAMA0 filename.eq3\n\n", prog);
 	fprintf(stderr, "Mandatory parameter:\n");
 	fprintf(stderr, "\t-U device\tuse HM-MOD-UART on given device\n");
-	fprintf(stderr, "Possible options:\n");
+	fprintf(stderr, "\nOptional parameters:\n");
 	fprintf(stderr, "\t-V\t\tshow version (" VERSION ")\n");
 
 }
@@ -87,8 +87,8 @@ int main(int argc, char **argv)
 				uart = optarg;
 				break;
 			case 'V':
-				printf("flash-hmcfgusb " VERSION "\n");
-				printf("Copyright (c) 2013-16 Michael Gernoth\n\n");
+				printf("flash-hmmoduart " VERSION "\n");
+				printf("Copyright (c) 2016 Michael Gernoth\n\n");
 				exit(EXIT_SUCCESS);
 			case 'h':
 			case ':':
