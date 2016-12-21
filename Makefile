@@ -30,7 +30,7 @@ flash-hmmoduart: $(FLASH_HMMODUART_OBJS)
 flash-ota: $(FLASH_OTA_OBJS)
 
 clean:
-	rm -f $(HMLAN_OBJS) $(HMSNIFF_OBJS) $(FLASH_HMCFGUSB_OBJS) $(FLASH_OTA_OBJS) $(DEPEND) hmland hmsniff flash-hmcfgusb flash-ota
+	rm -f $(HMLAN_OBJS) $(HMSNIFF_OBJS) $(FLASH_HMCFGUSB_OBJS) $(FLASH_HMMODUART_OBJS) $(FLASH_OTA_OBJS) $(DEPEND) hmland hmsniff flash-hmcfgusb flash-hmmoduart flash-ota
 
 .PHONY: all clean
 
